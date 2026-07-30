@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
@@ -9,6 +11,7 @@ class SelectionSheetView<T> extends StatefulWidget {
     required this.items,
     required this.itemLabelBuilder,
     required this.searchable,
+    required this.searchDebounceDuration,
     required this.theme,
     required this.scrollController,
     this.title,
@@ -26,6 +29,7 @@ class SelectionSheetView<T> extends StatefulWidget {
     required this.items,
     required this.itemLabelBuilder,
     required this.searchable,
+    required this.searchDebounceDuration,
     required this.theme,
     required this.scrollController,
     required this.initialSelection,
@@ -46,6 +50,7 @@ class SelectionSheetView<T> extends StatefulWidget {
   final Iterable<T> initialSelection;
   final bool searchable;
   final String? searchHintText;
+  final Duration searchDebounceDuration;
   final String? doneLabel;
   final SelectionSheetItemBuilder<T>? itemBuilder;
   final bool Function(T item)? isItemEnabled;
@@ -61,6 +66,7 @@ class SelectionSheetView<T> extends StatefulWidget {
 class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
   late final TextEditingController _searchController;
   late List<T> _selection;
+  Timer? _searchDebounceTimer;
   String _query = '';
 
   bool get _isCupertino {
@@ -79,6 +85,7 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
 
   @override
   void dispose() {
+    _searchDebounceTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -185,11 +192,11 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
           ? CupertinoSearchTextField(
               controller: _searchController,
               placeholder: hint,
-              onChanged: _updateQuery,
+              onChanged: _scheduleQueryUpdate,
             )
           : TextField(
               controller: _searchController,
-              onChanged: _updateQuery,
+              onChanged: _scheduleQueryUpdate,
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
                 hintText: hint,
@@ -200,7 +207,8 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
                         tooltip: 'Clear search',
                         onPressed: () {
                           _searchController.clear();
-                          _updateQuery('');
+                          _searchDebounceTimer?.cancel();
+                          _applyQuery('');
                         },
                         icon: const Icon(Icons.clear),
                       ),
@@ -210,7 +218,20 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
     );
   }
 
-  void _updateQuery(String value) {
+  void _scheduleQueryUpdate(String value) {
+    _searchDebounceTimer?.cancel();
+    if (widget.searchDebounceDuration == Duration.zero) {
+      _applyQuery(value);
+      return;
+    }
+    _searchDebounceTimer = Timer(
+      widget.searchDebounceDuration,
+      () => _applyQuery(value),
+    );
+  }
+
+  void _applyQuery(String value) {
+    if (!mounted) return;
     setState(() => _query = value.trim().toLowerCase());
   }
 

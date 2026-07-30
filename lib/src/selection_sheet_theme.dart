@@ -48,6 +48,7 @@ class SelectionSheetThemeData {
     this.itemPadding = const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
     this.contentPadding = const EdgeInsets.only(bottom: 12),
     this.searchPadding = const EdgeInsets.fromLTRB(16, 8, 16, 8),
+    this.searchDebounceDuration = const Duration(milliseconds: 300),
     this.itemBuilder,
     this.showDragHandle = true,
     this.showDividers = false,
@@ -101,6 +102,11 @@ class SelectionSheetThemeData {
   /// Padding around the search field.
   final EdgeInsetsGeometry searchPadding;
 
+  /// Delay between the latest search input and filtering the item list.
+  ///
+  /// Set this to [Duration.zero] to disable debouncing globally.
+  final Duration searchDebounceDuration;
+
   /// Optional application-wide item renderer.
   final SelectionSheetGlobalItemBuilder? itemBuilder;
 
@@ -138,6 +144,7 @@ class SelectionSheetThemeData {
     EdgeInsetsGeometry? itemPadding,
     EdgeInsetsGeometry? contentPadding,
     EdgeInsetsGeometry? searchPadding,
+    Duration? searchDebounceDuration,
     SelectionSheetGlobalItemBuilder? itemBuilder,
     bool clearItemBuilder = false,
     bool? showDragHandle,
@@ -158,6 +165,8 @@ class SelectionSheetThemeData {
       itemPadding: itemPadding ?? this.itemPadding,
       contentPadding: contentPadding ?? this.contentPadding,
       searchPadding: searchPadding ?? this.searchPadding,
+      searchDebounceDuration:
+          searchDebounceDuration ?? this.searchDebounceDuration,
       itemBuilder: clearItemBuilder ? null : itemBuilder ?? this.itemBuilder,
       showDragHandle: showDragHandle ?? this.showDragHandle,
       showDividers: showDividers ?? this.showDividers,
@@ -182,6 +191,7 @@ class SelectionSheetThemeData {
             other.itemPadding == itemPadding &&
             other.contentPadding == contentPadding &&
             other.searchPadding == searchPadding &&
+            other.searchDebounceDuration == searchDebounceDuration &&
             other.itemBuilder == itemBuilder &&
             other.showDragHandle == showDragHandle &&
             other.showDividers == showDividers &&
@@ -203,6 +213,7 @@ class SelectionSheetThemeData {
         itemPadding,
         contentPadding,
         searchPadding,
+        searchDebounceDuration,
         itemBuilder,
         showDragHandle,
         showDividers,

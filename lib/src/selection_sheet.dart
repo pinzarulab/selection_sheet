@@ -18,6 +18,7 @@ abstract final class SelectionSheet {
     T? initialValue,
     bool searchable = false,
     String? searchHintText,
+    Duration? searchDebounceDuration,
     SelectionSheetItemBuilder<T>? itemBuilder,
     bool Function(T item)? isItemEnabled,
     SelectionItemEquality<T>? itemEquals,
@@ -42,6 +43,10 @@ abstract final class SelectionSheet {
           initialValue: initialValue,
           searchable: searchable,
           searchHintText: searchHintText,
+          searchDebounceDuration: _resolveSearchDebounceDuration(
+            searchDebounceDuration,
+            resolvedTheme,
+          ),
           itemBuilder: itemBuilder,
           isItemEnabled: isItemEnabled,
           itemEquals: itemEquals,
@@ -64,6 +69,7 @@ abstract final class SelectionSheet {
     Iterable<T> initialSelection = const [],
     bool searchable = false,
     String? searchHintText,
+    Duration? searchDebounceDuration,
     String? doneLabel,
     SelectionSheetItemBuilder<T>? itemBuilder,
     bool Function(T item)? isItemEnabled,
@@ -89,6 +95,10 @@ abstract final class SelectionSheet {
           initialSelection: initialSelection,
           searchable: searchable,
           searchHintText: searchHintText,
+          searchDebounceDuration: _resolveSearchDebounceDuration(
+            searchDebounceDuration,
+            resolvedTheme,
+          ),
           doneLabel: doneLabel,
           itemBuilder: itemBuilder,
           isItemEnabled: isItemEnabled,
@@ -149,5 +159,20 @@ abstract final class SelectionSheet {
       barrierColor: Colors.black54,
       builder: sheetBuilder,
     );
+  }
+
+  static Duration _resolveSearchDebounceDuration(
+    Duration? override,
+    SelectionSheetThemeData theme,
+  ) {
+    final duration = override ?? theme.searchDebounceDuration;
+    if (duration.isNegative) {
+      throw ArgumentError.value(
+        duration,
+        'searchDebounceDuration',
+        'must not be negative',
+      );
+    }
+    return duration;
   }
 }

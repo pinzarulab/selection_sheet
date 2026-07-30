@@ -43,15 +43,52 @@ void main() {
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'ukr');
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 299));
+
+    expect(find.text('France'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 1));
 
     expect(find.text('Ukraine'), findsOneWidget);
     expect(find.text('France'), findsNothing);
 
     await tester.enterText(find.byType(TextField), 'missing');
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('No items found'), findsOneWidget);
+  });
+
+  testWidgets('per-sheet debounce overrides the global duration', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _TestApp(
+        theme: const SelectionSheetThemeData(
+          searchDebounceDuration: Duration(seconds: 1),
+        ),
+        onPressed: (context) {
+          SelectionSheet.showSingle<String>(
+            context: context,
+            items: const ['France', 'Ukraine'],
+            itemLabelBuilder: (item) => item,
+            searchable: true,
+            searchDebounceDuration: const Duration(milliseconds: 50),
+          );
+        },
+      ),
+    );
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'ukr');
+    await tester.pump(const Duration(milliseconds: 49));
+
+    expect(find.text('France'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 1));
+
+    expect(find.text('France'), findsNothing);
+    expect(find.text('Ukraine'), findsOneWidget);
   });
 
   testWidgets('multi selection commits only when Done is pressed', (

@@ -1,3 +1,9 @@
+## 0.2.0
+
+- Adds a 300 ms default debounce for local search.
+- Adds global and per-sheet search debounce configuration.
+- Allows debouncing to be disabled with `Duration.zero`.
+
 ## 0.1.0
 
 - Adds typed single and multi-selection sheets.

@@ -14,10 +14,22 @@ final country = await SelectionSheet.showSingle<Country>(
   context: context,
   items: countries,
   searchable: true,
+  searchDebounceDuration: const Duration(milliseconds: 400),
   title: 'Country',
   itemLabelBuilder: (country) => country.name,
 );
 ```
+
+Search uses a 300 ms debounce by default. Override it for an individual sheet
+with `searchDebounceDuration`, or configure it globally:
+
+```dart
+SelectionSheetThemeData.fallback(context).copyWith(
+  searchDebounceDuration: const Duration(milliseconds: 500),
+);
+```
+
+Use `Duration.zero` when filtering should happen immediately.
 
 ## Multi-selection
 
