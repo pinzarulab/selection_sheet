@@ -50,15 +50,29 @@ class SelectionSheetThemeData {
     this.searchPadding = const EdgeInsets.fromLTRB(16, 8, 16, 8),
     this.searchDebounceDuration = const Duration(milliseconds: 300),
     this.itemBuilder,
+    this.sectionHeaderBuilder,
+    this.loadingBuilder,
+    this.emptyBuilder,
+    this.errorBuilder,
+    this.loadingMoreBuilder,
+    this.loadMoreErrorBuilder,
     this.showDragHandle = true,
     this.showDividers = false,
+    this.showSelectedChips = true,
+    this.selectedChipsPadding = const EdgeInsets.fromLTRB(16, 0, 16, 8),
+    this.selectedChipsHeight = 42,
+    this.sectionHeaderHeight = 44,
     this.initialHeight = 0.72,
     this.minHeight = 0.35,
     this.maxHeight = 0.95,
     this.searchHintText = 'Search',
     this.doneLabel = 'Done',
     this.emptyLabel = 'No items found',
+    this.errorLabel = 'Could not load items',
+    this.retryLabel = 'Retry',
   })  : assert(minHeight > 0 && minHeight <= 1),
+        assert(selectedChipsHeight > 0),
+        assert(sectionHeaderHeight > 0),
         assert(initialHeight >= minHeight && initialHeight <= maxHeight),
         assert(maxHeight <= 1);
 
@@ -110,11 +124,41 @@ class SelectionSheetThemeData {
   /// Optional application-wide item renderer.
   final SelectionSheetGlobalItemBuilder? itemBuilder;
 
+  /// Optional application-wide section header renderer.
+  final SelectionSheetSectionHeaderBuilder? sectionHeaderBuilder;
+
+  /// Optional application-wide initial loading state.
+  final SelectionSheetLoadingBuilder? loadingBuilder;
+
+  /// Optional application-wide empty state.
+  final SelectionSheetEmptyBuilder? emptyBuilder;
+
+  /// Optional application-wide initial error state.
+  final SelectionSheetErrorBuilder? errorBuilder;
+
+  /// Optional application-wide pagination loading footer.
+  final SelectionSheetLoadingBuilder? loadingMoreBuilder;
+
+  /// Optional application-wide pagination error footer.
+  final SelectionSheetErrorBuilder? loadMoreErrorBuilder;
+
   /// Whether to show a drag handle.
   final bool showDragHandle;
 
   /// Whether to draw dividers between default rows.
   final bool showDividers;
+
+  /// Whether multi-selection sheets show selected-item chips.
+  final bool showSelectedChips;
+
+  /// Padding around selected-item chips.
+  final EdgeInsetsGeometry selectedChipsPadding;
+
+  /// Height of the horizontal selected-item chip list.
+  final double selectedChipsHeight;
+
+  /// Height of each section header.
+  final double sectionHeaderHeight;
 
   /// Initial fractional height of the sheet.
   final double initialHeight;
@@ -134,6 +178,12 @@ class SelectionSheetThemeData {
   /// Default text shown when filtering produces no items.
   final String emptyLabel;
 
+  /// Default initial loading error text.
+  final String errorLabel;
+
+  /// Default retry action text.
+  final String retryLabel;
+
   /// Returns a copy with selected values replaced.
   SelectionSheetThemeData copyWith({
     ShapeBorder? shape,
@@ -147,14 +197,27 @@ class SelectionSheetThemeData {
     Duration? searchDebounceDuration,
     SelectionSheetGlobalItemBuilder? itemBuilder,
     bool clearItemBuilder = false,
+    SelectionSheetSectionHeaderBuilder? sectionHeaderBuilder,
+    bool clearSectionHeaderBuilder = false,
+    SelectionSheetLoadingBuilder? loadingBuilder,
+    SelectionSheetEmptyBuilder? emptyBuilder,
+    SelectionSheetErrorBuilder? errorBuilder,
+    SelectionSheetLoadingBuilder? loadingMoreBuilder,
+    SelectionSheetErrorBuilder? loadMoreErrorBuilder,
     bool? showDragHandle,
     bool? showDividers,
+    bool? showSelectedChips,
+    EdgeInsetsGeometry? selectedChipsPadding,
+    double? selectedChipsHeight,
+    double? sectionHeaderHeight,
     double? initialHeight,
     double? minHeight,
     double? maxHeight,
     String? searchHintText,
     String? doneLabel,
     String? emptyLabel,
+    String? errorLabel,
+    String? retryLabel,
   }) {
     return SelectionSheetThemeData(
       shape: shape ?? this.shape,
@@ -168,14 +231,28 @@ class SelectionSheetThemeData {
       searchDebounceDuration:
           searchDebounceDuration ?? this.searchDebounceDuration,
       itemBuilder: clearItemBuilder ? null : itemBuilder ?? this.itemBuilder,
+      sectionHeaderBuilder: clearSectionHeaderBuilder
+          ? null
+          : sectionHeaderBuilder ?? this.sectionHeaderBuilder,
+      loadingBuilder: loadingBuilder ?? this.loadingBuilder,
+      emptyBuilder: emptyBuilder ?? this.emptyBuilder,
+      errorBuilder: errorBuilder ?? this.errorBuilder,
+      loadingMoreBuilder: loadingMoreBuilder ?? this.loadingMoreBuilder,
+      loadMoreErrorBuilder: loadMoreErrorBuilder ?? this.loadMoreErrorBuilder,
       showDragHandle: showDragHandle ?? this.showDragHandle,
       showDividers: showDividers ?? this.showDividers,
+      showSelectedChips: showSelectedChips ?? this.showSelectedChips,
+      selectedChipsPadding: selectedChipsPadding ?? this.selectedChipsPadding,
+      selectedChipsHeight: selectedChipsHeight ?? this.selectedChipsHeight,
+      sectionHeaderHeight: sectionHeaderHeight ?? this.sectionHeaderHeight,
       initialHeight: initialHeight ?? this.initialHeight,
       minHeight: minHeight ?? this.minHeight,
       maxHeight: maxHeight ?? this.maxHeight,
       searchHintText: searchHintText ?? this.searchHintText,
       doneLabel: doneLabel ?? this.doneLabel,
       emptyLabel: emptyLabel ?? this.emptyLabel,
+      errorLabel: errorLabel ?? this.errorLabel,
+      retryLabel: retryLabel ?? this.retryLabel,
     );
   }
 
@@ -193,18 +270,30 @@ class SelectionSheetThemeData {
             other.searchPadding == searchPadding &&
             other.searchDebounceDuration == searchDebounceDuration &&
             other.itemBuilder == itemBuilder &&
+            other.sectionHeaderBuilder == sectionHeaderBuilder &&
+            other.loadingBuilder == loadingBuilder &&
+            other.emptyBuilder == emptyBuilder &&
+            other.errorBuilder == errorBuilder &&
+            other.loadingMoreBuilder == loadingMoreBuilder &&
+            other.loadMoreErrorBuilder == loadMoreErrorBuilder &&
             other.showDragHandle == showDragHandle &&
             other.showDividers == showDividers &&
+            other.showSelectedChips == showSelectedChips &&
+            other.selectedChipsPadding == selectedChipsPadding &&
+            other.selectedChipsHeight == selectedChipsHeight &&
+            other.sectionHeaderHeight == sectionHeaderHeight &&
             other.initialHeight == initialHeight &&
             other.minHeight == minHeight &&
             other.maxHeight == maxHeight &&
             other.searchHintText == searchHintText &&
             other.doneLabel == doneLabel &&
-            other.emptyLabel == emptyLabel;
+            other.emptyLabel == emptyLabel &&
+            other.errorLabel == errorLabel &&
+            other.retryLabel == retryLabel;
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
         shape,
         backgroundColor,
         surfaceTintColor,
@@ -215,13 +304,25 @@ class SelectionSheetThemeData {
         searchPadding,
         searchDebounceDuration,
         itemBuilder,
+        sectionHeaderBuilder,
+        loadingBuilder,
+        emptyBuilder,
+        errorBuilder,
+        loadingMoreBuilder,
+        loadMoreErrorBuilder,
         showDragHandle,
         showDividers,
+        showSelectedChips,
+        selectedChipsPadding,
+        selectedChipsHeight,
+        sectionHeaderHeight,
         initialHeight,
         minHeight,
         maxHeight,
         searchHintText,
         doneLabel,
         emptyLabel,
-      );
+        errorLabel,
+        retryLabel,
+      ]);
 }

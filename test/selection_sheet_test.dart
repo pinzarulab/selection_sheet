@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:selection_sheet/selection_sheet.dart';
@@ -166,6 +168,328 @@ void main() {
 
     expect(result, isNull);
     expect(find.text('Disabled'), findsOneWidget);
+  });
+
+  testWidgets('remote search ignores stale responses', (tester) async {
+    final requests = <SelectionSheetLoadRequest>[];
+    final responses = <String, Completer<SelectionSheetPage<String>>>{};
+
+    await tester.pumpWidget(
+      _TestApp(
+        onPressed: (context) {
+          SelectionSheet.showSingle<String>(
+            context: context,
+            loadItems: (request) {
+              requests.add(request);
+              final response = Completer<SelectionSheetPage<String>>();
+              responses[request.query] = response;
+              return response.future;
+            },
+            itemLabelBuilder: (item) => item,
+            searchable: true,
+            searchDebounceDuration: Duration.zero,
+            loadingBuilder: (context) => const Text('Loading results'),
+          );
+        },
+      ),
+    );
+
+    await tester.tap(find.text('Open'));
+    await tester.pump();
+    expect(requests.single.query, '');
+    responses['']!.complete(
+      const SelectionSheetPage(items: ['Initial']),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'first');
+    await tester.pump();
+    await tester.enterText(find.byType(TextField), 'second');
+    await tester.pump();
+
+    responses['second']!.complete(
+      const SelectionSheetPage(items: ['Second result']),
+    );
+    await tester.pump();
+    responses['first']!.complete(
+      const SelectionSheetPage(items: ['Stale first result']),
+    );
+    await tester.pump();
+
+    expect(find.text('Second result'), findsOneWidget);
+    expect(find.text('Stale first result'), findsNothing);
+    expect(
+      requests.map((request) => request.query),
+      ['', 'first', 'second'],
+    );
+  });
+
+  testWidgets('controller refresh resets page one and preserves the query', (
+    tester,
+  ) async {
+    final controller = SelectionSheetController();
+    final requests = <SelectionSheetLoadRequest>[];
+
+    await tester.pumpWidget(
+      _TestApp(
+        onPressed: (context) {
+          SelectionSheet.showSingle<String>(
+            context: context,
+            controller: controller,
+            loadItems: (request) async {
+              requests.add(request);
+              return SelectionSheetPage(
+                items: ['Result ${requests.length}'],
+              );
+            },
+            itemLabelBuilder: (item) => item,
+            searchable: true,
+            searchDebounceDuration: Duration.zero,
+          );
+        },
+      ),
+    );
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    expect(controller.isAttached, isTrue);
+    expect(find.byType(RefreshIndicator), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'team');
+    await tester.pumpAndSettle();
+    await controller.refresh();
+    await tester.pumpAndSettle();
+
+    expect(requests, hasLength(3));
+    expect(requests.last.query, 'team');
+    expect(requests.last.page, 1);
+    expect(requests.last.cursor, isNull);
+    expect(find.text('Result 3'), findsOneWidget);
+
+    await tester.tap(find.text('Result 3'));
+    await tester.pumpAndSettle();
+    expect(controller.isAttached, isFalse);
+  });
+
+  testWidgets('pagination forwards page number, page size, and cursor', (
+    tester,
+  ) async {
+    final requests = <SelectionSheetLoadRequest>[];
+
+    await tester.pumpWidget(
+      _TestApp(
+        onPressed: (context) {
+          SelectionSheet.showSingle<String>(
+            context: context,
+            loadItems: (request) async {
+              requests.add(request);
+              if (request.page == 1) {
+                return const SelectionSheetPage(
+                  items: ['First page'],
+                  hasMore: true,
+                  nextCursor: 'cursor-2',
+                );
+              }
+              return const SelectionSheetPage(items: ['Second page']);
+            },
+            pageSize: 25,
+            itemLabelBuilder: (item) => item,
+          );
+        },
+      ),
+    );
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+
+    expect(requests, hasLength(2));
+    expect(requests[0].page, 1);
+    expect(requests[0].cursor, isNull);
+    expect(requests[1].page, 2);
+    expect(requests[1].pageSize, 25);
+    expect(requests[1].cursor, 'cursor-2');
+    expect(find.text('First page'), findsOneWidget);
+    expect(find.text('Second page'), findsOneWidget);
+  });
+
+  testWidgets('sections use sticky custom headers', (tester) async {
+    await tester.pumpWidget(
+      _TestApp(
+        onPressed: (context) {
+          SelectionSheet.showSingle<String>(
+            context: context,
+            items: const ['A-one', 'A-two', 'B-one'],
+            itemLabelBuilder: (item) => item,
+            sectionBuilder: (item) => item.substring(0, 1),
+            sectionHeaderBuilder: (context, section) {
+              return Text('${section.label}: ${section.itemCount}');
+            },
+          );
+        },
+      ),
+    );
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('A: 2'), findsOneWidget);
+    expect(find.text('B: 1'), findsOneWidget);
+    final headers = tester.widgetList<SliverPersistentHeader>(
+      find.byType(SliverPersistentHeader),
+    );
+    expect(headers, hasLength(2));
+    expect(headers.every((header) => header.pinned), isTrue);
+  });
+
+  testWidgets('selected item chips can be customized and remove selections', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _TestApp(
+        onPressed: (context) {
+          SelectionSheet.showMulti<String>(
+            context: context,
+            items: const ['France', 'Germany'],
+            initialSelection: const ['France'],
+            itemLabelBuilder: (item) => item,
+            selectedChipBuilder: (context, item, label, onDeleted) {
+              return ActionChip(
+                label: Text('Selected $label'),
+                onPressed: onDeleted,
+              );
+            },
+          );
+        },
+      ),
+    );
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    expect(find.text('Selected France'), findsOneWidget);
+
+    await tester.tap(find.text('Selected France'));
+    await tester.pump();
+
+    expect(find.text('Selected France'), findsNothing);
+    expect(find.text('France'), findsOneWidget);
+  });
+
+  testWidgets('custom loading and error states can retry', (tester) async {
+    final firstResponse = Completer<SelectionSheetPage<String>>();
+    var attempts = 0;
+
+    await tester.pumpWidget(
+      _TestApp(
+        onPressed: (context) {
+          SelectionSheet.showSingle<String>(
+            context: context,
+            loadItems: (request) {
+              attempts++;
+              if (attempts == 1) return firstResponse.future;
+              return Future.value(
+                const SelectionSheetPage(items: ['Recovered']),
+              );
+            },
+            itemLabelBuilder: (item) => item,
+            loadingBuilder: (context) => const Text('Custom loading'),
+            errorBuilder: (context, error, retry) {
+              return TextButton(
+                onPressed: retry,
+                child: const Text('Custom retry'),
+              );
+            },
+          );
+        },
+      ),
+    );
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    expect(find.text('Custom loading'), findsOneWidget);
+
+    firstResponse.completeError(StateError('network failed'));
+    await tester.pumpAndSettle();
+    expect(find.text('Custom retry'), findsOneWidget);
+
+    await tester.tap(find.text('Custom retry'));
+    await tester.pumpAndSettle();
+
+    expect(attempts, 2);
+    expect(find.text('Recovered'), findsOneWidget);
+  });
+
+  testWidgets('custom empty state receives the debounced query', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _TestApp(
+        onPressed: (context) {
+          SelectionSheet.showSingle<String>(
+            context: context,
+            loadItems: (request) async {
+              return const SelectionSheetPage(items: []);
+            },
+            itemLabelBuilder: (item) => item,
+            searchable: true,
+            searchDebounceDuration: Duration.zero,
+            emptyBuilder: (context, query) => Text('Empty: $query'),
+          );
+        },
+      ),
+    );
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Ukraine');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Empty: Ukraine'), findsOneWidget);
+  });
+
+  testWidgets('pagination errors expose a custom retry builder', (
+    tester,
+  ) async {
+    var secondPageAttempts = 0;
+
+    await tester.pumpWidget(
+      _TestApp(
+        onPressed: (context) {
+          SelectionSheet.showSingle<String>(
+            context: context,
+            loadItems: (request) async {
+              if (request.page == 1) {
+                return const SelectionSheetPage(
+                  items: ['First page'],
+                  hasMore: true,
+                );
+              }
+              secondPageAttempts++;
+              if (secondPageAttempts == 1) {
+                throw StateError('page failed');
+              }
+              return const SelectionSheetPage(items: ['Recovered page']);
+            },
+            itemLabelBuilder: (item) => item,
+            loadMoreErrorBuilder: (context, error, retry) {
+              return TextButton(
+                onPressed: retry,
+                child: const Text('Retry page'),
+              );
+            },
+          );
+        },
+      ),
+    );
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    expect(find.text('Retry page'), findsOneWidget);
+
+    await tester.tap(find.text('Retry page'));
+    await tester.pumpAndSettle();
+
+    expect(secondPageAttempts, 2);
+    expect(find.text('Recovered page'), findsOneWidget);
   });
 }
 

@@ -6,44 +6,103 @@ import 'package:flutter/material.dart';
 import 'selection_sheet_theme.dart';
 import 'selection_sheet_types.dart';
 
+/// Controls a currently presented remote selection sheet.
+class SelectionSheetController {
+  Future<void> Function()? _refreshCallback;
+
+  /// Whether this controller is attached to an open remote sheet.
+  bool get isAttached => _refreshCallback != null;
+
+  /// Reloads page one for the current debounced query.
+  ///
+  /// This preserves the draft selection, invalidates older in-flight requests,
+  /// and resets both page-number and cursor pagination. It completes
+  /// immediately when no remote sheet is attached.
+  Future<void> refresh() async {
+    await _refreshCallback?.call();
+  }
+
+  void _attach(Future<void> Function() callback) {
+    _refreshCallback = callback;
+  }
+
+  void _detach(Future<void> Function() callback) {
+    if (identical(_refreshCallback, callback)) {
+      _refreshCallback = null;
+    }
+  }
+}
+
 class SelectionSheetView<T> extends StatefulWidget {
   const SelectionSheetView.single({
-    required this.items,
     required this.itemLabelBuilder,
     required this.searchable,
     required this.searchDebounceDuration,
+    required this.pageSize,
+    required this.stickySectionHeaders,
+    required this.enablePullToRefresh,
     required this.theme,
     required this.scrollController,
+    this.items,
+    this.loadItems,
     this.title,
     this.initialValue,
     this.searchHintText,
     this.itemBuilder,
     this.isItemEnabled,
     this.itemEquals,
+    this.sectionBuilder,
+    this.sectionLabelBuilder,
+    this.sectionHeaderBuilder,
+    this.loadingBuilder,
+    this.emptyBuilder,
+    this.errorBuilder,
+    this.loadingMoreBuilder,
+    this.loadMoreErrorBuilder,
+    this.controller,
     super.key,
   })  : isMulti = false,
         initialSelection = const [],
-        doneLabel = null;
+        doneLabel = null,
+        showSelectedChips = false,
+        selectedChipBuilder = null;
 
   const SelectionSheetView.multi({
-    required this.items,
     required this.itemLabelBuilder,
     required this.searchable,
     required this.searchDebounceDuration,
+    required this.pageSize,
+    required this.stickySectionHeaders,
+    required this.showSelectedChips,
+    required this.enablePullToRefresh,
     required this.theme,
     required this.scrollController,
     required this.initialSelection,
+    this.items,
+    this.loadItems,
     this.title,
     this.searchHintText,
     this.doneLabel,
     this.itemBuilder,
     this.isItemEnabled,
     this.itemEquals,
+    this.sectionBuilder,
+    this.sectionLabelBuilder,
+    this.sectionHeaderBuilder,
+    this.selectedChipBuilder,
+    this.loadingBuilder,
+    this.emptyBuilder,
+    this.errorBuilder,
+    this.loadingMoreBuilder,
+    this.loadMoreErrorBuilder,
+    this.controller,
     super.key,
   })  : isMulti = true,
         initialValue = null;
 
-  final List<T> items;
+  final List<T>? items;
+  final SelectionSheetPageLoader<T>? loadItems;
+  final int pageSize;
   final SelectionItemLabelBuilder<T> itemLabelBuilder;
   final String? title;
   final T? initialValue;
@@ -55,9 +114,24 @@ class SelectionSheetView<T> extends StatefulWidget {
   final SelectionSheetItemBuilder<T>? itemBuilder;
   final bool Function(T item)? isItemEnabled;
   final SelectionItemEquality<T>? itemEquals;
+  final SelectionSheetSectionBuilder<T>? sectionBuilder;
+  final SelectionSheetSectionLabelBuilder? sectionLabelBuilder;
+  final SelectionSheetSectionHeaderBuilder? sectionHeaderBuilder;
+  final bool stickySectionHeaders;
+  final bool showSelectedChips;
+  final SelectionSheetSelectedChipBuilder<T>? selectedChipBuilder;
+  final SelectionSheetLoadingBuilder? loadingBuilder;
+  final SelectionSheetEmptyBuilder? emptyBuilder;
+  final SelectionSheetErrorBuilder? errorBuilder;
+  final SelectionSheetLoadingBuilder? loadingMoreBuilder;
+  final SelectionSheetErrorBuilder? loadMoreErrorBuilder;
+  final SelectionSheetController? controller;
+  final bool enablePullToRefresh;
   final SelectionSheetThemeData theme;
   final ScrollController scrollController;
   final bool isMulti;
+
+  bool get isRemote => loadItems != null;
 
   @override
   State<SelectionSheetView<T>> createState() => _SelectionSheetViewState<T>();
@@ -66,8 +140,19 @@ class SelectionSheetView<T> extends StatefulWidget {
 class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
   late final TextEditingController _searchController;
   late List<T> _selection;
+  late List<T> _items;
   Timer? _searchDebounceTimer;
   String _query = '';
+
+  int _requestGeneration = 0;
+  int _nextPage = 1;
+  Object? _nextCursor;
+  bool _hasMore = false;
+  bool _loadingInitial = false;
+  bool _loadingMore = false;
+  Object? _initialError;
+  Object? _loadMoreError;
+  Future<void> Function()? _attachedRefresh;
 
   bool get _isCupertino {
     final platform = Theme.of(context).platform;
@@ -81,11 +166,27 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
     _selection = widget.isMulti
         ? List<T>.of(widget.initialSelection)
         : <T>[if (widget.initialValue case final value?) value];
+    _items = List<T>.of(widget.items ?? const []);
+    widget.scrollController.addListener(_handleScroll);
+
+    if (widget.isRemote) {
+      Future<void> refresh() => _reloadRemote();
+      _attachedRefresh = refresh;
+      widget.controller?._attach(refresh);
+      _loadingInitial = true;
+      final generation = ++_requestGeneration;
+      unawaited(_performInitialLoad(generation));
+    }
   }
 
   @override
   void dispose() {
+    _requestGeneration++;
     _searchDebounceTimer?.cancel();
+    if (_attachedRefresh case final refresh?) {
+      widget.controller?._detach(refresh);
+    }
+    widget.scrollController.removeListener(_handleScroll);
     _searchController.dispose();
     super.dispose();
   }
@@ -99,10 +200,128 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
   }
 
   List<T> get _visibleItems {
-    if (_query.isEmpty) return widget.items;
-    return widget.items.where((item) {
-      return widget.itemLabelBuilder(item).toLowerCase().contains(_query);
+    if (widget.isRemote || _query.isEmpty) return _items;
+    final normalizedQuery = _query.toLowerCase();
+    return _items.where((item) {
+      return widget
+          .itemLabelBuilder(item)
+          .toLowerCase()
+          .contains(normalizedQuery);
     }).toList(growable: false);
+  }
+
+  Future<void> _performInitialLoad(int generation) async {
+    try {
+      final page = await widget.loadItems!(
+        SelectionSheetLoadRequest(
+          query: _query,
+          page: 1,
+          pageSize: widget.pageSize,
+        ),
+      );
+      if (!mounted || generation != _requestGeneration) return;
+      setState(() {
+        _items = List<T>.of(page.items);
+        _nextPage = 2;
+        _nextCursor = page.nextCursor;
+        _hasMore = page.hasMore;
+        _loadingInitial = false;
+        _initialError = null;
+      });
+      _schedulePaginationCheck();
+    } catch (error) {
+      if (!mounted || generation != _requestGeneration) return;
+      setState(() {
+        _loadingInitial = false;
+        _initialError = error;
+      });
+    }
+  }
+
+  Future<void> _reloadRemote() {
+    if (!widget.isRemote || !mounted) return Future<void>.value();
+    final generation = ++_requestGeneration;
+    setState(() {
+      _items = [];
+      _nextPage = 1;
+      _nextCursor = null;
+      _hasMore = false;
+      _loadingInitial = true;
+      _loadingMore = false;
+      _initialError = null;
+      _loadMoreError = null;
+    });
+    return _performInitialLoad(generation);
+  }
+
+  void _handleScroll() {
+    if (!widget.scrollController.hasClients) return;
+    if (widget.scrollController.position.extentAfter < 240) {
+      _loadNextPage();
+    }
+  }
+
+  void _schedulePaginationCheck() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !widget.scrollController.hasClients) return;
+      _handleScroll();
+    });
+  }
+
+  void _loadNextPage() {
+    if (!widget.isRemote ||
+        !_hasMore ||
+        _loadingInitial ||
+        _loadingMore ||
+        _loadMoreError != null) {
+      return;
+    }
+
+    final generation = _requestGeneration;
+    final requestedPage = _nextPage;
+    final requestedCursor = _nextCursor;
+    setState(() => _loadingMore = true);
+    unawaited(
+      _performNextPage(generation, requestedPage, requestedCursor),
+    );
+  }
+
+  Future<void> _performNextPage(
+    int generation,
+    int requestedPage,
+    Object? requestedCursor,
+  ) async {
+    try {
+      final page = await widget.loadItems!(
+        SelectionSheetLoadRequest(
+          query: _query,
+          page: requestedPage,
+          pageSize: widget.pageSize,
+          cursor: requestedCursor,
+        ),
+      );
+      if (!mounted || generation != _requestGeneration) return;
+      setState(() {
+        _items.addAll(page.items);
+        _nextPage = requestedPage + 1;
+        _nextCursor = page.nextCursor;
+        _hasMore = page.hasMore;
+        _loadingMore = false;
+        _loadMoreError = null;
+      });
+      _schedulePaginationCheck();
+    } catch (error) {
+      if (!mounted || generation != _requestGeneration) return;
+      setState(() {
+        _loadingMore = false;
+        _loadMoreError = error;
+      });
+    }
+  }
+
+  void _retryNextPage() {
+    setState(() => _loadMoreError = null);
+    _loadNextPage();
   }
 
   void _select(T item) {
@@ -122,6 +341,12 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
       } else {
         _selection.removeAt(index);
       }
+    });
+  }
+
+  void _removeSelection(T item) {
+    setState(() {
+      _selection.removeWhere((selected) => _equals(selected, item));
     });
   }
 
@@ -146,7 +371,11 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
                 _DragHandle(color: theme.dragHandleColor),
               _buildHeader(context),
               if (widget.searchable) _buildSearch(context),
-              Expanded(child: _buildItems(context)),
+              if (widget.isMulti &&
+                  widget.showSelectedChips &&
+                  _selection.isNotEmpty)
+                _buildSelectedChips(context),
+              Expanded(child: _buildBody(context)),
             ],
           ),
         ),
@@ -165,16 +394,19 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
         children: [
           if (widget.title case final title?)
             Expanded(
-              child: Text(title, style: Theme.of(context).textTheme.titleLarge),
+              child: Text(
+                title,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
             )
           else
             const Spacer(),
           if (widget.isMulti)
             _AdaptiveTextButton(
               onPressed: () {
-                Navigator.of(
-                  context,
-                ).pop<List<T>>(List<T>.unmodifiable(_selection));
+                Navigator.of(context).pop<List<T>>(
+                  List<T>.unmodifiable(_selection),
+                );
               },
               label: widget.doneLabel ?? widget.theme.doneLabel,
               cupertino: _isCupertino,
@@ -218,6 +450,35 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
     );
   }
 
+  Widget _buildSelectedChips(BuildContext context) {
+    return Padding(
+      padding: widget.theme.selectedChipsPadding,
+      child: SizedBox(
+        height: widget.theme.selectedChipsHeight,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: _selection.length,
+          separatorBuilder: (context, index) => const SizedBox(width: 8),
+          itemBuilder: (context, index) {
+            final item = _selection[index];
+            final label = widget.itemLabelBuilder(item);
+            void onDeleted() => _removeSelection(item);
+            return widget.selectedChipBuilder?.call(
+                  context,
+                  item,
+                  label,
+                  onDeleted,
+                ) ??
+                InputChip(
+                  label: Text(label),
+                  onDeleted: onDeleted,
+                );
+          },
+        ),
+      ),
+    );
+  }
+
   void _scheduleQueryUpdate(String value) {
     _searchDebounceTimer?.cancel();
     if (widget.searchDebounceDuration == Duration.zero) {
@@ -232,37 +493,206 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
 
   void _applyQuery(String value) {
     if (!mounted) return;
-    setState(() => _query = value.trim().toLowerCase());
+    final query = value.trim();
+    if (query == _query) return;
+    if (widget.isRemote) {
+      _query = query;
+      unawaited(_reloadRemote());
+    } else {
+      setState(() => _query = query);
+    }
   }
 
-  Widget _buildItems(BuildContext context) {
+  Widget _buildBody(BuildContext context) {
+    if (_loadingInitial) {
+      final custom = widget.loadingBuilder?.call(context) ??
+          widget.theme.loadingBuilder?.call(context);
+      return custom == null
+          ? const Center(child: CircularProgressIndicator())
+          : Center(child: custom);
+    }
+
+    if (_initialError case final error?) {
+      final retry = _reloadRemote;
+      final custom = widget.errorBuilder?.call(context, error, retry) ??
+          widget.theme.errorBuilder?.call(context, error, retry);
+      return custom == null
+          ? _DefaultErrorState(
+              message: widget.theme.errorLabel,
+              retryLabel: widget.theme.retryLabel,
+              onRetry: retry,
+            )
+          : Center(child: custom);
+    }
+
     final items = _visibleItems;
     if (items.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(
-            widget.theme.emptyLabel,
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyLarge,
+      final custom = widget.emptyBuilder?.call(context, _query) ??
+          widget.theme.emptyBuilder?.call(context, _query);
+      return custom == null
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  widget.theme.emptyLabel,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+              ),
+            )
+          : Center(child: custom);
+    }
+
+    return _buildItems(context, items);
+  }
+
+  Widget _buildItems(BuildContext context, List<T> items) {
+    final slivers = <Widget>[];
+    if (widget.sectionBuilder == null) {
+      slivers.add(
+        SliverPadding(
+          padding: widget.theme.contentPadding,
+          sliver: _buildItemSliver(items),
+        ),
+      );
+    } else {
+      for (final section in _groupItems(items)) {
+        slivers.add(
+          SliverPersistentHeader(
+            pinned: widget.stickySectionHeaders,
+            delegate: _SectionHeaderDelegate(
+              height: widget.theme.sectionHeaderHeight,
+              child: _buildSectionHeader(context, section),
+            ),
+          ),
+        );
+        slivers.add(
+          SliverPadding(
+            padding: widget.theme.itemPadding,
+            sliver: _buildItemSliver(section.items, applyItemPadding: false),
+          ),
+        );
+      }
+      slivers.add(
+        SliverPadding(
+          padding: EdgeInsets.only(
+            bottom: widget.theme.contentPadding
+                .resolve(Directionality.of(context))
+                .bottom,
           ),
         ),
       );
     }
 
-    return ListView.separated(
+    if (_loadingMore || _loadMoreError != null) {
+      slivers.add(
+        SliverToBoxAdapter(child: _buildPaginationFooter(context)),
+      );
+    }
+
+    final scrollView = CustomScrollView(
       controller: widget.scrollController,
-      padding: widget.theme.contentPadding,
+      physics: widget.isRemote && widget.enablePullToRefresh
+          ? const AlwaysScrollableScrollPhysics()
+          : null,
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      itemCount: items.length,
-      separatorBuilder: (context, index) => widget.theme.showDividers
-          ? const Divider(height: 1)
-          : const SizedBox.shrink(),
-      itemBuilder: (context, index) {
-        final item = items[index];
-        return _buildItem(context, item);
-      },
+      slivers: slivers,
     );
+    if (!widget.isRemote || !widget.enablePullToRefresh) return scrollView;
+    return RefreshIndicator.adaptive(
+      onRefresh: _reloadRemote,
+      child: scrollView,
+    );
+  }
+
+  Widget _buildItemSliver(
+    List<T> items, {
+    bool applyItemPadding = true,
+  }) {
+    final showDividers = widget.theme.showDividers;
+    final childCount = showDividers ? items.length * 2 - 1 : items.length;
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          if (showDividers && index.isOdd) {
+            return const Divider(height: 1);
+          }
+          final itemIndex = showDividers ? index ~/ 2 : index;
+          final child = _buildItem(context, items[itemIndex]);
+          if (!applyItemPadding) return child;
+          return Padding(padding: widget.theme.itemPadding, child: child);
+        },
+        childCount: childCount,
+      ),
+    );
+  }
+
+  List<_SectionGroup<T>> _groupItems(List<T> items) {
+    final grouped = <Object?, List<T>>{};
+    for (final item in items) {
+      final key = widget.sectionBuilder!(item);
+      grouped.putIfAbsent(key, () => []).add(item);
+    }
+    return [
+      for (final entry in grouped.entries)
+        _SectionGroup<T>(
+          data: SelectionSheetSectionData(
+            key: entry.key,
+            label: widget.sectionLabelBuilder?.call(entry.key) ??
+                entry.key?.toString() ??
+                '',
+            itemCount: entry.value.length,
+          ),
+          items: entry.value,
+        ),
+    ];
+  }
+
+  Widget _buildSectionHeader(
+    BuildContext context,
+    _SectionGroup<T> section,
+  ) {
+    return widget.sectionHeaderBuilder?.call(context, section.data) ??
+        widget.theme.sectionHeaderBuilder?.call(context, section.data) ??
+        ColoredBox(
+          color: widget.theme.backgroundColor ?? Colors.transparent,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                section.data.label,
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            ),
+          ),
+        );
+  }
+
+  Widget _buildPaginationFooter(BuildContext context) {
+    if (_loadingMore) {
+      return widget.loadingMoreBuilder?.call(context) ??
+          widget.theme.loadingMoreBuilder?.call(context) ??
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Center(child: CircularProgressIndicator()),
+          );
+    }
+
+    final error = _loadMoreError!;
+    final retry = _retryNextPage;
+    return widget.loadMoreErrorBuilder?.call(context, error, retry) ??
+        widget.theme.loadMoreErrorBuilder?.call(context, error, retry) ??
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Center(
+            child: TextButton.icon(
+              onPressed: retry,
+              icon: const Icon(Icons.refresh),
+              label: Text(widget.theme.retryLabel),
+            ),
+          ),
+        );
   }
 
   Widget _buildItem(BuildContext context, T item) {
@@ -297,20 +727,51 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
         ) ??
         defaultChild;
 
-    return Padding(
-      padding: widget.theme.itemPadding,
-      child: Semantics(
-        selected: selected,
-        enabled: enabled,
-        button: true,
-        label: label,
-        child: InkWell(
-          onTap: enabled ? () => _select(item) : null,
-          borderRadius: BorderRadius.circular(12),
-          child: child,
-        ),
+    return Semantics(
+      selected: selected,
+      enabled: enabled,
+      button: true,
+      label: label,
+      child: InkWell(
+        onTap: enabled ? () => _select(item) : null,
+        borderRadius: BorderRadius.circular(12),
+        child: child,
       ),
     );
+  }
+}
+
+class _SectionGroup<T> {
+  const _SectionGroup({required this.data, required this.items});
+
+  final SelectionSheetSectionData data;
+  final List<T> items;
+}
+
+class _SectionHeaderDelegate extends SliverPersistentHeaderDelegate {
+  const _SectionHeaderDelegate({required this.height, required this.child});
+
+  final double height;
+  final Widget child;
+
+  @override
+  double get minExtent => height;
+
+  @override
+  double get maxExtent => height;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    return SizedBox.expand(child: child);
+  }
+
+  @override
+  bool shouldRebuild(_SectionHeaderDelegate oldDelegate) {
+    return height != oldDelegate.height || child != oldDelegate.child;
   }
 }
 
@@ -352,6 +813,37 @@ class _AdaptiveTextButton extends StatelessWidget {
       return CupertinoButton(onPressed: onPressed, child: Text(label));
     }
     return TextButton(onPressed: onPressed, child: Text(label));
+  }
+}
+
+class _DefaultErrorState extends StatelessWidget {
+  const _DefaultErrorState({
+    required this.message,
+    required this.retryLabel,
+    required this.onRetry,
+  });
+
+  final String message;
+  final String retryLabel;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, size: 32),
+            const SizedBox(height: 12),
+            Text(message, textAlign: TextAlign.center),
+            const SizedBox(height: 8),
+            TextButton(onPressed: onRetry, child: Text(retryLabel)),
+          ],
+        ),
+      ),
+    );
   }
 }
 

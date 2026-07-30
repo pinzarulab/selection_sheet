@@ -7,13 +7,16 @@ import 'selection_sheet_view.dart';
 
 /// Presents adaptive selection workflows as modal sheets.
 abstract final class SelectionSheet {
-  /// Shows a searchable single-selection sheet.
+  /// Shows a local or remote single-selection sheet.
   ///
-  /// Returns the selected item, or `null` when the sheet is dismissed.
+  /// Provide exactly one of [items] or [loadItems]. Returns the selected item,
+  /// or `null` when the sheet is dismissed.
   static Future<T?> showSingle<T>({
     required BuildContext context,
-    required List<T> items,
     required SelectionItemLabelBuilder<T> itemLabelBuilder,
+    List<T>? items,
+    SelectionSheetPageLoader<T>? loadItems,
+    int pageSize = 20,
     String? title,
     T? initialValue,
     bool searchable = false,
@@ -22,12 +25,24 @@ abstract final class SelectionSheet {
     SelectionSheetItemBuilder<T>? itemBuilder,
     bool Function(T item)? isItemEnabled,
     SelectionItemEquality<T>? itemEquals,
+    SelectionSheetSectionBuilder<T>? sectionBuilder,
+    SelectionSheetSectionLabelBuilder? sectionLabelBuilder,
+    SelectionSheetSectionHeaderBuilder? sectionHeaderBuilder,
+    bool stickySectionHeaders = true,
+    SelectionSheetLoadingBuilder? loadingBuilder,
+    SelectionSheetEmptyBuilder? emptyBuilder,
+    SelectionSheetErrorBuilder? errorBuilder,
+    SelectionSheetLoadingBuilder? loadingMoreBuilder,
+    SelectionSheetErrorBuilder? loadMoreErrorBuilder,
+    SelectionSheetController? controller,
+    bool enablePullToRefresh = true,
     SelectionSheetThemeData? theme,
     SelectionSheetPresentation presentation =
         SelectionSheetPresentation.adaptive,
     bool useRootNavigator = false,
     bool isDismissible = true,
   }) {
+    _validateSource(items, loadItems, pageSize);
     final resolvedTheme = theme ?? SelectionSheetTheme.of(context);
     return _show<T>(
       context: context,
@@ -38,6 +53,8 @@ abstract final class SelectionSheet {
       builder: (sheetContext, scrollController) {
         return SelectionSheetView<T>.single(
           items: items,
+          loadItems: loadItems,
+          pageSize: pageSize,
           itemLabelBuilder: itemLabelBuilder,
           title: title,
           initialValue: initialValue,
@@ -50,6 +67,17 @@ abstract final class SelectionSheet {
           itemBuilder: itemBuilder,
           isItemEnabled: isItemEnabled,
           itemEquals: itemEquals,
+          sectionBuilder: sectionBuilder,
+          sectionLabelBuilder: sectionLabelBuilder,
+          sectionHeaderBuilder: sectionHeaderBuilder,
+          stickySectionHeaders: stickySectionHeaders,
+          loadingBuilder: loadingBuilder,
+          emptyBuilder: emptyBuilder,
+          errorBuilder: errorBuilder,
+          loadingMoreBuilder: loadingMoreBuilder,
+          loadMoreErrorBuilder: loadMoreErrorBuilder,
+          controller: controller,
+          enablePullToRefresh: enablePullToRefresh,
           theme: resolvedTheme,
           scrollController: scrollController,
         );
@@ -57,14 +85,17 @@ abstract final class SelectionSheet {
     );
   }
 
-  /// Shows a searchable multi-selection sheet.
+  /// Shows a local or remote multi-selection sheet.
   ///
-  /// Changes are kept as a draft until the confirmation action is pressed.
-  /// Returns the confirmed selection, or `null` when dismissed.
+  /// Provide exactly one of [items] or [loadItems]. Changes remain a draft
+  /// until the confirmation action is pressed. Returns the confirmed
+  /// selection, or `null` when dismissed.
   static Future<List<T>?> showMulti<T>({
     required BuildContext context,
-    required List<T> items,
     required SelectionItemLabelBuilder<T> itemLabelBuilder,
+    List<T>? items,
+    SelectionSheetPageLoader<T>? loadItems,
+    int pageSize = 20,
     String? title,
     Iterable<T> initialSelection = const [],
     bool searchable = false,
@@ -74,12 +105,26 @@ abstract final class SelectionSheet {
     SelectionSheetItemBuilder<T>? itemBuilder,
     bool Function(T item)? isItemEnabled,
     SelectionItemEquality<T>? itemEquals,
+    SelectionSheetSectionBuilder<T>? sectionBuilder,
+    SelectionSheetSectionLabelBuilder? sectionLabelBuilder,
+    SelectionSheetSectionHeaderBuilder? sectionHeaderBuilder,
+    bool stickySectionHeaders = true,
+    bool? showSelectedChips,
+    SelectionSheetSelectedChipBuilder<T>? selectedChipBuilder,
+    SelectionSheetLoadingBuilder? loadingBuilder,
+    SelectionSheetEmptyBuilder? emptyBuilder,
+    SelectionSheetErrorBuilder? errorBuilder,
+    SelectionSheetLoadingBuilder? loadingMoreBuilder,
+    SelectionSheetErrorBuilder? loadMoreErrorBuilder,
+    SelectionSheetController? controller,
+    bool enablePullToRefresh = true,
     SelectionSheetThemeData? theme,
     SelectionSheetPresentation presentation =
         SelectionSheetPresentation.adaptive,
     bool useRootNavigator = false,
     bool isDismissible = true,
   }) {
+    _validateSource(items, loadItems, pageSize);
     final resolvedTheme = theme ?? SelectionSheetTheme.of(context);
     return _show<List<T>>(
       context: context,
@@ -90,6 +135,8 @@ abstract final class SelectionSheet {
       builder: (sheetContext, scrollController) {
         return SelectionSheetView<T>.multi(
           items: items,
+          loadItems: loadItems,
+          pageSize: pageSize,
           itemLabelBuilder: itemLabelBuilder,
           title: title,
           initialSelection: initialSelection,
@@ -103,11 +150,40 @@ abstract final class SelectionSheet {
           itemBuilder: itemBuilder,
           isItemEnabled: isItemEnabled,
           itemEquals: itemEquals,
+          sectionBuilder: sectionBuilder,
+          sectionLabelBuilder: sectionLabelBuilder,
+          sectionHeaderBuilder: sectionHeaderBuilder,
+          stickySectionHeaders: stickySectionHeaders,
+          showSelectedChips:
+              showSelectedChips ?? resolvedTheme.showSelectedChips,
+          selectedChipBuilder: selectedChipBuilder,
+          loadingBuilder: loadingBuilder,
+          emptyBuilder: emptyBuilder,
+          errorBuilder: errorBuilder,
+          loadingMoreBuilder: loadingMoreBuilder,
+          loadMoreErrorBuilder: loadMoreErrorBuilder,
+          controller: controller,
+          enablePullToRefresh: enablePullToRefresh,
           theme: resolvedTheme,
           scrollController: scrollController,
         );
       },
     );
+  }
+
+  static void _validateSource<T>(
+    List<T>? items,
+    SelectionSheetPageLoader<T>? loadItems,
+    int pageSize,
+  ) {
+    if ((items == null) == (loadItems == null)) {
+      throw ArgumentError(
+        'Provide exactly one of items or loadItems.',
+      );
+    }
+    if (pageSize <= 0) {
+      throw ArgumentError.value(pageSize, 'pageSize', 'must be greater than 0');
+    }
   }
 
   static Future<R?> _show<R>({

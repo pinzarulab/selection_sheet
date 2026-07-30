@@ -42,15 +42,30 @@ class _CountryPageState extends State<CountryPage> {
   ];
 
   Country? selected;
+  List<Country> selectedCountries = [];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Selection Sheet')),
       body: Center(
-        child: FilledButton(
-          onPressed: _selectCountry,
-          child: Text(selected?.name ?? 'Choose a country'),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FilledButton(
+              onPressed: _selectCountry,
+              child: Text(selected?.name ?? 'Choose a country'),
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton(
+              onPressed: _selectCountriesRemotely,
+              child: Text(
+                selectedCountries.isEmpty
+                    ? 'Remote multi-selection'
+                    : '${selectedCountries.length} countries selected',
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -77,6 +92,50 @@ class _CountryPageState extends State<CountryPage> {
     );
 
     if (result != null) setState(() => selected = result);
+  }
+
+  Future<void> _selectCountriesRemotely() async {
+    final result = await SelectionSheet.showMulti<Country>(
+      context: context,
+      loadItems: (request) async {
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        final matches = countries.where((country) {
+          return country.name.toLowerCase().contains(
+                request.query.toLowerCase(),
+              );
+        }).toList();
+        final start = (request.page - 1) * request.pageSize;
+        if (start >= matches.length) {
+          return const SelectionSheetPage(items: []);
+        }
+        final end = (start + request.pageSize).clamp(0, matches.length);
+        return SelectionSheetPage(
+          items: matches.sublist(start, end),
+          hasMore: end < matches.length,
+        );
+      },
+      pageSize: 2,
+      initialSelection: selectedCountries,
+      searchable: true,
+      title: 'Remote countries',
+      itemLabelBuilder: (country) => country.name,
+      itemEquals: (first, second) => first.code == second.code,
+      sectionBuilder: (country) => country.region,
+      sectionHeaderBuilder: (context, section) {
+        return ColoredBox(
+          color: Theme.of(context).colorScheme.surfaceContainer,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(section.label),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (result != null) setState(() => selectedCountries = result);
   }
 }
 

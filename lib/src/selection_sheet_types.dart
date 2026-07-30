@@ -5,10 +5,49 @@ typedef SelectionItemLabelBuilder<T> = String Function(T item);
 
 /// Builds a row for a typed item in a selection sheet.
 typedef SelectionSheetItemBuilder<T> = Widget Function(
-    BuildContext context, T item, SelectionItemState state);
+  BuildContext context,
+  T item,
+  SelectionItemState state,
+);
 
 /// Compares two items for selection equality.
 typedef SelectionItemEquality<T> = bool Function(T first, T second);
+
+/// Loads one page of remote items.
+typedef SelectionSheetPageLoader<T> = Future<SelectionSheetPage<T>> Function(
+    SelectionSheetLoadRequest request);
+
+/// Resolves the section key for an item.
+typedef SelectionSheetSectionBuilder<T> = Object? Function(T item);
+
+/// Creates a display label for a section key.
+typedef SelectionSheetSectionLabelBuilder = String Function(Object? section);
+
+/// Builds a sticky or non-sticky section header.
+typedef SelectionSheetSectionHeaderBuilder = Widget Function(
+    BuildContext context, SelectionSheetSectionData section);
+
+/// Builds a selected-item chip for a typed item.
+typedef SelectionSheetSelectedChipBuilder<T> = Widget Function(
+  BuildContext context,
+  T item,
+  String label,
+  VoidCallback onDeleted,
+);
+
+/// Builds a loading state.
+typedef SelectionSheetLoadingBuilder = Widget Function(BuildContext context);
+
+/// Builds an empty state.
+typedef SelectionSheetEmptyBuilder = Widget Function(
+    BuildContext context, String query);
+
+/// Builds an error state with a retry action.
+typedef SelectionSheetErrorBuilder = Widget Function(
+  BuildContext context,
+  Object error,
+  VoidCallback retry,
+);
 
 /// Controls which route style presents the selection sheet.
 enum SelectionSheetPresentation {
@@ -20,6 +59,55 @@ enum SelectionSheetPresentation {
 
   /// Always uses a Cupertino modal popup.
   cupertino,
+}
+
+/// A request passed to a remote [SelectionSheetPageLoader].
+@immutable
+class SelectionSheetLoadRequest {
+  /// Creates a page request.
+  const SelectionSheetLoadRequest({
+    required this.query,
+    required this.page,
+    required this.pageSize,
+    this.cursor,
+  });
+
+  /// Current debounced search text.
+  final String query;
+
+  /// One-based page number.
+  ///
+  /// Page-based repositories can use this directly. Cursor-based repositories
+  /// can ignore it and use [cursor].
+  final int page;
+
+  /// Requested page size.
+  final int pageSize;
+
+  /// Cursor returned by the previous page, or `null` for the first page.
+  final Object? cursor;
+}
+
+/// One page returned by a remote selection loader.
+@immutable
+class SelectionSheetPage<T> {
+  /// Creates a page of items.
+  const SelectionSheetPage({
+    required this.items,
+    this.hasMore = false,
+    this.nextCursor,
+  });
+
+  /// Items in this page.
+  final List<T> items;
+
+  /// Whether another page can be requested.
+  final bool hasMore;
+
+  /// Cursor to send with the next request.
+  ///
+  /// Leave this `null` for page-number pagination.
+  final Object? nextCursor;
 }
 
 /// Presentation state supplied to a per-sheet [SelectionSheetItemBuilder].
@@ -38,15 +126,31 @@ class SelectionItemState {
   /// Whether the item can be selected.
   final bool isEnabled;
 
-  /// The current normalized search query.
+  /// The current debounced search query.
   final String query;
 }
 
+/// Information supplied to a section header builder.
+@immutable
+class SelectionSheetSectionData {
+  /// Creates section presentation data.
+  const SelectionSheetSectionData({
+    required this.key,
+    required this.label,
+    required this.itemCount,
+  });
+
+  /// Original key returned by the section resolver.
+  final Object? key;
+
+  /// Display label for the key.
+  final String label;
+
+  /// Number of visible items in the section.
+  final int itemCount;
+}
+
 /// Type-erased item information supplied to a global theme builder.
-///
-/// A global builder intentionally receives the resolved [label], allowing one
-/// renderer to work for every item type. Use a typed per-sheet builder when a
-/// row needs fields from the original model.
 @immutable
 class SelectionSheetItemData {
   /// Creates item data for a global renderer.
@@ -71,13 +175,10 @@ class SelectionSheetItemData {
   /// Whether the item can be selected.
   final bool isEnabled;
 
-  /// The current normalized search query.
+  /// The current debounced search query.
   final String query;
 
   /// The package's default adaptive row.
-  ///
-  /// Global builders can decorate this child instead of rebuilding a complete
-  /// row.
   final Widget defaultChild;
 }
 
