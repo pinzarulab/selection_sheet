@@ -52,9 +52,20 @@ class _CountryPageState extends State<CountryPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            FilledButton(
-              onPressed: _selectCountry,
-              child: Text(selected?.name ?? 'Choose a country'),
+            SizedBox(
+              width: 320,
+              child: SelectionSheetFormField<Country>(
+                items: countries,
+                initialValue: selected,
+                searchable: true,
+                title: 'Country',
+                decoration: const InputDecoration(labelText: 'Country'),
+                itemLabelBuilder: (country) => country.name,
+                itemEquals: (first, second) => first.code == second.code,
+                validator: (country) =>
+                    country == null ? 'Choose a country' : null,
+                onChanged: (country) => setState(() => selected = country),
+              ),
             ),
             const SizedBox(height: 16),
             OutlinedButton(
@@ -71,34 +82,12 @@ class _CountryPageState extends State<CountryPage> {
     );
   }
 
-  Future<void> _selectCountry() async {
-    final result = await SelectionSheet.showSingle<Country>(
-      context: context,
-      items: countries,
-      initialValue: selected,
-      searchable: true,
-      title: 'Country',
-      itemLabelBuilder: (country) => country.name,
-      itemEquals: (first, second) => first.code == second.code,
-      itemBuilder: (context, country, state) {
-        return ListTile(
-          leading: CircleAvatar(child: Text(country.code)),
-          title: Text(country.name),
-          subtitle: Text(country.region),
-          selected: state.isSelected,
-          trailing: state.isSelected ? const Icon(Icons.check) : null,
-        );
-      },
-    );
-
-    if (result != null) setState(() => selected = result);
-  }
-
   Future<void> _selectCountriesRemotely() async {
     final result = await SelectionSheet.showMulti<Country>(
       context: context,
       loadItems: (request) async {
         await Future<void>.delayed(const Duration(milliseconds: 400));
+        request.cancellationToken.throwIfCancelled();
         final matches = countries.where((country) {
           return country.name.toLowerCase().contains(
                 request.query.toLowerCase(),
@@ -121,6 +110,21 @@ class _CountryPageState extends State<CountryPage> {
       itemLabelBuilder: (country) => country.name,
       itemEquals: (first, second) => first.code == second.code,
       sectionBuilder: (country) => country.region,
+      layout: SelectionSheetLayout.grid,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        childAspectRatio: 2.5,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+      ),
+      itemBuilder: (context, country, state) {
+        return Card(
+          color: state.isSelected
+              ? Theme.of(context).colorScheme.secondaryContainer
+              : null,
+          child: Center(child: Text('${country.code}  ${country.name}')),
+        );
+      },
       sectionHeaderBuilder: (context, section) {
         return ColoredBox(
           color: Theme.of(context).colorScheme.surfaceContainer,

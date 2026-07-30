@@ -64,6 +64,37 @@ Page-based repositories can ignore `request.cursor`. Cursor-based repositories
 can ignore `request.page`. When a new search begins, responses from all older
 search generations are ignored automatically.
 
+### Cancelling async work
+
+Every request includes a cooperative cancellation token. It is cancelled when
+a search is superseded, the sheet refreshes, or the route closes:
+
+```dart
+loadItems: (request) async {
+  final operation = api.searchUsers(
+    query: request.query,
+    cursor: request.cursor,
+  );
+  final removeListener = request.cancellationToken.onCancel(operation.cancel);
+
+  try {
+    final response = await operation.value;
+    request.cancellationToken.throwIfCancelled();
+    return SelectionSheetPage(
+      items: response.users,
+      hasMore: response.hasMore,
+      nextCursor: response.nextCursor,
+    );
+  } finally {
+    removeListener();
+  }
+},
+```
+
+Repositories that cannot cancel their underlying future can inspect
+`request.cancellationToken.isCancelled`. Stale responses are still rejected by
+the sheet even when the repository ignores cancellation.
+
 ### Refreshing remote results
 
 Pass a controller when another part of the application needs to refresh the
@@ -134,6 +165,62 @@ SelectionSheet.showSingle<User>(
 ```
 
 Section order follows the first occurrence of each key in the loaded items.
+
+## Grid presentation
+
+Grid mode uses the same local/remote search, pagination, sections, selection,
+and item builders as list mode:
+
+```dart
+SelectionSheet.showMulti<Product>(
+  context: context,
+  items: products,
+  itemLabelBuilder: (product) => product.name,
+  layout: SelectionSheetLayout.grid,
+  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+    crossAxisCount: 2,
+    childAspectRatio: 0.8,
+    crossAxisSpacing: 12,
+    mainAxisSpacing: 12,
+  ),
+  itemBuilder: (context, product, state) {
+    return ProductSelectionCard(
+      product: product,
+      selected: state.isSelected,
+    );
+  },
+);
+```
+
+Set `layout` and `gridDelegate` in `SelectionSheetThemeData` to make grid mode
+the application-wide default.
+
+## Native form fields
+
+The package integrates directly with Flutter's `Form` and `FormField` APIs and
+does not depend on a third-party form package.
+
+```dart
+Form(
+  key: formKey,
+  child: SelectionSheetFormField<Country>(
+    items: countries,
+    searchable: true,
+    itemLabelBuilder: (country) => country.name,
+    decoration: const InputDecoration(labelText: 'Country'),
+    validator: (country) {
+      return country == null ? 'Country is required' : null;
+    },
+    onSaved: (country) => profile.country = country,
+  ),
+);
+```
+
+For multiple values, use `SelectionSheetMultiFormField<T>`. Both widgets
+support local and remote sources, sections, custom item rows, grid layout,
+validation, saving, clearing, and `AutovalidateMode`. `hintText` is optional,
+so a field with `InputDecoration(labelText: 'Country')` does not show a
+redundant selection prompt unless one is explicitly provided.
 
 ## Loading, empty, and error states
 
@@ -221,6 +308,6 @@ SelectionSheet.showSingle<Country>(
 
 ## Roadmap
 
-- Form and `smart_form_fields` integration
-- Async request cancellation hooks
-- Grid presentation
+- Keyboard navigation for desktop grids
+- Request caching policies
+- Accessibility and localization audit

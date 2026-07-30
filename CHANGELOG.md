@@ -1,3 +1,11 @@
+## 0.4.0
+
+- Adds cooperative cancellation tokens to every async page request.
+- Cancels superseded search, refresh, pagination, and dismissed-sheet requests.
+- Adds globally and locally configurable grid presentation.
+- Adds native single and multi Flutter `FormField` widgets.
+- Keeps form-field hints optional to avoid duplicating an input label.
+
 ## 0.3.0
 
 - Adds debounced remote search with stale-response protection.

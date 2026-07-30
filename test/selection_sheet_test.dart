@@ -224,6 +224,83 @@ void main() {
     );
   });
 
+  testWidgets('superseded requests signal cooperative cancellation', (
+    tester,
+  ) async {
+    final responses = <String, Completer<SelectionSheetPage<String>>>{};
+    final cancelledQueries = <String>[];
+
+    await tester.pumpWidget(
+      _TestApp(
+        onPressed: (context) {
+          SelectionSheet.showSingle<String>(
+            context: context,
+            loadItems: (request) {
+              request.cancellationToken.onCancel(
+                () => cancelledQueries.add(request.query),
+              );
+              final response = Completer<SelectionSheetPage<String>>();
+              responses[request.query] = response;
+              return response.future;
+            },
+            itemLabelBuilder: (item) => item,
+            searchable: true,
+            searchDebounceDuration: Duration.zero,
+            loadingBuilder: (context) => const Text('Loading'),
+          );
+        },
+      ),
+    );
+
+    await tester.tap(find.text('Open'));
+    await tester.pump();
+    await tester.enterText(find.byType(TextField), 'new query');
+    await tester.pump();
+
+    expect(cancelledQueries, ['']);
+    expect(responses[''] != null, isTrue);
+    expect(responses['new query'] != null, isTrue);
+
+    responses['new query']!.complete(
+      const SelectionSheetPage(items: ['Fresh result']),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Fresh result'), findsOneWidget);
+  });
+
+  testWidgets('closing the sheet cancels an active request', (tester) async {
+    SelectionSheetCancellationToken? activeToken;
+    var cancellationCalls = 0;
+    final response = Completer<SelectionSheetPage<String>>();
+
+    await tester.pumpWidget(
+      _TestApp(
+        onPressed: (context) {
+          SelectionSheet.showSingle<String>(
+            context: context,
+            loadItems: (request) {
+              activeToken = request.cancellationToken;
+              request.cancellationToken.onCancel(() => cancellationCalls++);
+              return response.future;
+            },
+            itemLabelBuilder: (item) => item,
+            loadingBuilder: (context) => const Text('Loading'),
+          );
+        },
+      ),
+    );
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    expect(activeToken?.isCancelled, isFalse);
+
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+
+    expect(activeToken?.isCancelled, isTrue);
+    expect(cancellationCalls, 1);
+  });
+
   testWidgets('controller refresh resets page one and preserves the query', (
     tester,
   ) async {
@@ -339,6 +416,34 @@ void main() {
     );
     expect(headers, hasLength(2));
     expect(headers.every((header) => header.pinned), isTrue);
+  });
+
+  testWidgets('grid presentation can be configured globally', (tester) async {
+    await tester.pumpWidget(
+      _TestApp(
+        theme: const SelectionSheetThemeData(
+          layout: SelectionSheetLayout.grid,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            childAspectRatio: 3,
+          ),
+        ),
+        onPressed: (context) {
+          SelectionSheet.showSingle<String>(
+            context: context,
+            items: const ['One', 'Two', 'Three'],
+            itemLabelBuilder: (item) => item,
+          );
+        },
+      ),
+    );
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SliverGrid), findsOneWidget);
+    expect(find.text('One'), findsOneWidget);
+    expect(find.text('Three'), findsOneWidget);
   });
 
   testWidgets('selected item chips can be customized and remove selections', (
@@ -490,6 +595,79 @@ void main() {
 
     expect(secondPageAttempts, 2);
     expect(find.text('Recovered page'), findsOneWidget);
+  });
+
+  testWidgets('single form field validates and updates its value', (
+    tester,
+  ) async {
+    final formKey = GlobalKey<FormState>();
+    String? changedValue;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Form(
+            key: formKey,
+            child: Column(
+              children: [
+                SelectionSheetFormField<String>(
+                  items: const ['France', 'Germany'],
+                  itemLabelBuilder: (item) => item,
+                  hintText: 'Select an item',
+                  validator: (value) =>
+                      value == null ? 'Country is required' : null,
+                  onChanged: (value) => changedValue = value,
+                ),
+                FilledButton(
+                  onPressed: () => formKey.currentState!.validate(),
+                  child: const Text('Validate'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Validate'));
+    await tester.pump();
+    expect(find.text('Country is required'), findsOneWidget);
+
+    await tester.tap(find.text('Select an item'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Germany'));
+    await tester.pumpAndSettle();
+
+    expect(changedValue, 'Germany');
+    expect(find.text('Germany'), findsOneWidget);
+    expect(formKey.currentState!.validate(), isTrue);
+  });
+
+  testWidgets('multi form field commits selected values', (tester) async {
+    List<String>? changedValue;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SelectionSheetMultiFormField<String>(
+            items: const ['France', 'Germany'],
+            initialValue: const ['France'],
+            itemLabelBuilder: (item) => item,
+            onChanged: (value) => changedValue = value,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('France'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Germany'));
+    await tester.pump();
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+
+    expect(changedValue, ['France', 'Germany']);
+    expect(find.text('France, Germany'), findsOneWidget);
   });
 }
 

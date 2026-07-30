@@ -40,6 +40,8 @@ class SelectionSheetView<T> extends StatefulWidget {
     required this.searchDebounceDuration,
     required this.pageSize,
     required this.stickySectionHeaders,
+    required this.layout,
+    required this.gridDelegate,
     required this.enablePullToRefresh,
     required this.theme,
     required this.scrollController,
@@ -73,6 +75,8 @@ class SelectionSheetView<T> extends StatefulWidget {
     required this.searchDebounceDuration,
     required this.pageSize,
     required this.stickySectionHeaders,
+    required this.layout,
+    required this.gridDelegate,
     required this.showSelectedChips,
     required this.enablePullToRefresh,
     required this.theme,
@@ -118,6 +122,8 @@ class SelectionSheetView<T> extends StatefulWidget {
   final SelectionSheetSectionLabelBuilder? sectionLabelBuilder;
   final SelectionSheetSectionHeaderBuilder? sectionHeaderBuilder;
   final bool stickySectionHeaders;
+  final SelectionSheetLayout layout;
+  final SliverGridDelegate gridDelegate;
   final bool showSelectedChips;
   final SelectionSheetSelectedChipBuilder<T>? selectedChipBuilder;
   final SelectionSheetLoadingBuilder? loadingBuilder;
@@ -153,6 +159,7 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
   Object? _initialError;
   Object? _loadMoreError;
   Future<void> Function()? _attachedRefresh;
+  final Set<SelectionSheetCancellationToken> _activeRequestTokens = {};
 
   bool get _isCupertino {
     final platform = Theme.of(context).platform;
@@ -182,6 +189,7 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
   @override
   void dispose() {
     _requestGeneration++;
+    _cancelActiveRequests();
     _searchDebounceTimer?.cancel();
     if (_attachedRefresh case final refresh?) {
       widget.controller?._detach(refresh);
@@ -211,15 +219,21 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
   }
 
   Future<void> _performInitialLoad(int generation) async {
+    final cancellationToken = _createRequestToken();
     try {
       final page = await widget.loadItems!(
         SelectionSheetLoadRequest(
           query: _query,
           page: 1,
           pageSize: widget.pageSize,
+          cancellationToken: cancellationToken,
         ),
       );
-      if (!mounted || generation != _requestGeneration) return;
+      if (!mounted ||
+          cancellationToken.isCancelled ||
+          generation != _requestGeneration) {
+        return;
+      }
       setState(() {
         _items = List<T>.of(page.items);
         _nextPage = 2;
@@ -230,16 +244,23 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
       });
       _schedulePaginationCheck();
     } catch (error) {
-      if (!mounted || generation != _requestGeneration) return;
+      if (!mounted ||
+          cancellationToken.isCancelled ||
+          generation != _requestGeneration) {
+        return;
+      }
       setState(() {
         _loadingInitial = false;
         _initialError = error;
       });
+    } finally {
+      _activeRequestTokens.remove(cancellationToken);
     }
   }
 
   Future<void> _reloadRemote() {
     if (!widget.isRemote || !mounted) return Future<void>.value();
+    _cancelActiveRequests();
     final generation = ++_requestGeneration;
     setState(() {
       _items = [];
@@ -291,6 +312,7 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
     int requestedPage,
     Object? requestedCursor,
   ) async {
+    final cancellationToken = _createRequestToken();
     try {
       final page = await widget.loadItems!(
         SelectionSheetLoadRequest(
@@ -298,9 +320,14 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
           page: requestedPage,
           pageSize: widget.pageSize,
           cursor: requestedCursor,
+          cancellationToken: cancellationToken,
         ),
       );
-      if (!mounted || generation != _requestGeneration) return;
+      if (!mounted ||
+          cancellationToken.isCancelled ||
+          generation != _requestGeneration) {
+        return;
+      }
       setState(() {
         _items.addAll(page.items);
         _nextPage = requestedPage + 1;
@@ -311,11 +338,33 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
       });
       _schedulePaginationCheck();
     } catch (error) {
-      if (!mounted || generation != _requestGeneration) return;
+      if (!mounted ||
+          cancellationToken.isCancelled ||
+          generation != _requestGeneration) {
+        return;
+      }
       setState(() {
         _loadingMore = false;
         _loadMoreError = error;
       });
+    } finally {
+      _activeRequestTokens.remove(cancellationToken);
+    }
+  }
+
+  SelectionSheetCancellationToken _createRequestToken() {
+    final token = SelectionSheetCancellationToken();
+    _activeRequestTokens.add(token);
+    return token;
+  }
+
+  void _cancelActiveRequests() {
+    final tokens = List<SelectionSheetCancellationToken>.of(
+      _activeRequestTokens,
+    );
+    _activeRequestTokens.clear();
+    for (final token in tokens) {
+      token.cancel();
     }
   }
 
@@ -609,6 +658,20 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
     List<T> items, {
     bool applyItemPadding = true,
   }) {
+    if (widget.layout == SelectionSheetLayout.grid) {
+      return SliverGrid(
+        gridDelegate: widget.gridDelegate,
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            final child = _buildItem(context, items[index]);
+            if (!applyItemPadding) return child;
+            return Padding(padding: widget.theme.itemPadding, child: child);
+          },
+          childCount: items.length,
+        ),
+      );
+    }
+
     final showDividers = widget.theme.showDividers;
     final childCount = showDividers ? items.length * 2 - 1 : items.length;
     return SliverList(

@@ -49,6 +49,15 @@ typedef SelectionSheetErrorBuilder = Widget Function(
   VoidCallback retry,
 );
 
+/// Controls how selection items are arranged.
+enum SelectionSheetLayout {
+  /// A vertically scrolling list.
+  list,
+
+  /// A configurable scrolling grid.
+  grid,
+}
+
 /// Controls which route style presents the selection sheet.
 enum SelectionSheetPresentation {
   /// Uses Cupertino presentation on Apple platforms and Material elsewhere.
@@ -69,6 +78,7 @@ class SelectionSheetLoadRequest {
     required this.query,
     required this.page,
     required this.pageSize,
+    required this.cancellationToken,
     this.cursor,
   });
 
@@ -86,6 +96,61 @@ class SelectionSheetLoadRequest {
 
   /// Cursor returned by the previous page, or `null` for the first page.
   final Object? cursor;
+
+  /// Cooperative cancellation token for this request.
+  ///
+  /// Repositories can stop HTTP clients, database work, or other expensive
+  /// operations when the sheet starts a newer search, refreshes, or closes.
+  final SelectionSheetCancellationToken cancellationToken;
+}
+
+/// Cooperative cancellation signal for one async page request.
+class SelectionSheetCancellationToken {
+  final Set<VoidCallback> _listeners = {};
+  bool _isCancelled = false;
+
+  /// Whether the request has been superseded or the sheet has closed.
+  bool get isCancelled => _isCancelled;
+
+  /// Registers [listener] and returns a function that unregisters it.
+  ///
+  /// If cancellation already happened, [listener] is invoked immediately.
+  VoidCallback onCancel(VoidCallback listener) {
+    if (_isCancelled) {
+      listener();
+      return () {};
+    }
+    _listeners.add(listener);
+    return () => _listeners.remove(listener);
+  }
+
+  /// Throws [SelectionSheetRequestCancelled] when cancelled.
+  void throwIfCancelled() {
+    if (_isCancelled) throw const SelectionSheetRequestCancelled();
+  }
+
+  /// Signals cancellation.
+  ///
+  /// This is invoked by the sheet. It remains public so custom data-source
+  /// orchestration can forward cancellation between operations.
+  void cancel() {
+    if (_isCancelled) return;
+    _isCancelled = true;
+    final listeners = List<VoidCallback>.of(_listeners);
+    _listeners.clear();
+    for (final listener in listeners) {
+      listener();
+    }
+  }
+}
+
+/// Thrown by [SelectionSheetCancellationToken.throwIfCancelled].
+class SelectionSheetRequestCancelled implements Exception {
+  /// Creates a cancellation exception.
+  const SelectionSheetRequestCancelled();
+
+  @override
+  String toString() => 'Selection sheet request cancelled';
 }
 
 /// One page returned by a remote selection loader.

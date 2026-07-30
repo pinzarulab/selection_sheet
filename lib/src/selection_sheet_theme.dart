@@ -62,6 +62,13 @@ class SelectionSheetThemeData {
     this.selectedChipsPadding = const EdgeInsets.fromLTRB(16, 0, 16, 8),
     this.selectedChipsHeight = 42,
     this.sectionHeaderHeight = 44,
+    this.layout = SelectionSheetLayout.list,
+    this.gridDelegate = const SliverGridDelegateWithMaxCrossAxisExtent(
+      maxCrossAxisExtent: 320,
+      childAspectRatio: 4,
+      crossAxisSpacing: 8,
+      mainAxisSpacing: 8,
+    ),
     this.initialHeight = 0.72,
     this.minHeight = 0.35,
     this.maxHeight = 0.95,
@@ -160,6 +167,12 @@ class SelectionSheetThemeData {
   /// Height of each section header.
   final double sectionHeaderHeight;
 
+  /// Default item arrangement.
+  final SelectionSheetLayout layout;
+
+  /// Default grid geometry when [layout] is [SelectionSheetLayout.grid].
+  final SliverGridDelegate gridDelegate;
+
   /// Initial fractional height of the sheet.
   final double initialHeight;
 
@@ -210,6 +223,8 @@ class SelectionSheetThemeData {
     EdgeInsetsGeometry? selectedChipsPadding,
     double? selectedChipsHeight,
     double? sectionHeaderHeight,
+    SelectionSheetLayout? layout,
+    SliverGridDelegate? gridDelegate,
     double? initialHeight,
     double? minHeight,
     double? maxHeight,
@@ -245,6 +260,8 @@ class SelectionSheetThemeData {
       selectedChipsPadding: selectedChipsPadding ?? this.selectedChipsPadding,
       selectedChipsHeight: selectedChipsHeight ?? this.selectedChipsHeight,
       sectionHeaderHeight: sectionHeaderHeight ?? this.sectionHeaderHeight,
+      layout: layout ?? this.layout,
+      gridDelegate: gridDelegate ?? this.gridDelegate,
       initialHeight: initialHeight ?? this.initialHeight,
       minHeight: minHeight ?? this.minHeight,
       maxHeight: maxHeight ?? this.maxHeight,
@@ -282,6 +299,8 @@ class SelectionSheetThemeData {
             other.selectedChipsPadding == selectedChipsPadding &&
             other.selectedChipsHeight == selectedChipsHeight &&
             other.sectionHeaderHeight == sectionHeaderHeight &&
+            other.layout == layout &&
+            other.gridDelegate == gridDelegate &&
             other.initialHeight == initialHeight &&
             other.minHeight == minHeight &&
             other.maxHeight == maxHeight &&
@@ -316,6 +335,8 @@ class SelectionSheetThemeData {
         selectedChipsPadding,
         selectedChipsHeight,
         sectionHeaderHeight,
+        layout,
+        gridDelegate,
         initialHeight,
         minHeight,
         maxHeight,
