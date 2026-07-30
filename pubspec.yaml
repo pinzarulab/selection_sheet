@@ -1,6 +1,7 @@
 name: selection_sheet
 description: "A production-ready adaptive selection workflow for Flutter."
 version: 0.1.0
+repository: https://github.com/pinzarulab/selection_sheet
 
 topics:
   - bottom-sheet
