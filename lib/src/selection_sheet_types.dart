@@ -13,6 +13,15 @@ typedef SelectionSheetItemBuilder<T> = Widget Function(
 /// Compares two items for selection equality.
 typedef SelectionItemEquality<T> = bool Function(T first, T second);
 
+/// Resolves the stable identity used for selection and page deduplication.
+typedef SelectionItemKeyBuilder<T> = Object Function(T item);
+
+/// Builds the search input shown above selection results.
+typedef SelectionSheetSearchFieldBuilder = Widget Function(
+  BuildContext context,
+  SelectionSheetSearchFieldData search,
+);
+
 /// Loads one page of remote items.
 typedef SelectionSheetPageLoader<T> = Future<SelectionSheetPage<T>> Function(
     SelectionSheetLoadRequest request);
@@ -68,6 +77,45 @@ enum SelectionSheetPresentation {
 
   /// Always uses a Cupertino modal popup.
   cupertino,
+}
+
+/// Optional reusable source and header configuration for modal helpers.
+///
+/// Pass this to `SelectionSheet.showSingle` or `SelectionSheet.showMulti`.
+/// Any equivalent argument supplied directly to the helper takes precedence.
+@immutable
+class SelectionSheetViewItem<T> {
+  /// Creates a partial selection-view configuration.
+  const SelectionSheetViewItem({
+    this.items,
+    this.loadItems,
+    this.pageSize,
+    this.initialValue,
+    this.initialSelection,
+    this.hintText,
+    this.title,
+  }) : assert(pageSize == null || pageSize > 0);
+
+  /// Local items, mutually exclusive with [loadItems] after resolution.
+  final List<T>? items;
+
+  /// Remote loader, mutually exclusive with [items] after resolution.
+  final SelectionSheetPageLoader<T>? loadItems;
+
+  /// Number of remote items requested per page.
+  final int? pageSize;
+
+  /// Initial value used by a single-selection helper.
+  final T? initialValue;
+
+  /// Initial values used by a multi-selection helper.
+  final Iterable<T>? initialSelection;
+
+  /// Search-input hint text.
+  final String? hintText;
+
+  /// Sheet title.
+  final String? title;
 }
 
 /// A request passed to a remote [SelectionSheetPageLoader].
@@ -151,6 +199,38 @@ class SelectionSheetRequestCancelled implements Exception {
 
   @override
   String toString() => 'Selection sheet request cancelled';
+}
+
+/// State and actions supplied to a custom search-field builder.
+@immutable
+class SelectionSheetSearchFieldData {
+  /// Creates search-field data.
+  const SelectionSheetSearchFieldData({
+    required this.controller,
+    required this.focusNode,
+    required this.hintText,
+    required this.query,
+    required this.onChanged,
+    required this.onClear,
+  });
+
+  /// Controller owned and disposed by the selection view.
+  final TextEditingController controller;
+
+  /// Focus node owned and disposed by the selection view.
+  final FocusNode focusNode;
+
+  /// Resolved local or global hint text.
+  final String hintText;
+
+  /// Current debounced query.
+  final String query;
+
+  /// Must be called when the custom input text changes.
+  final ValueChanged<String> onChanged;
+
+  /// Clears the controller and immediately applies an empty query.
+  final VoidCallback onClear;
 }
 
 /// One page returned by a remote selection loader.

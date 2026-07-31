@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'selection_sheet_theme.dart';
 import 'selection_sheet_types.dart';
 
-/// Controls a currently presented remote selection sheet.
+/// Controls a remote selection sheet or embedded selection view.
 class SelectionSheetController {
   Future<void> Function()? _refreshCallback;
 
@@ -33,66 +33,81 @@ class SelectionSheetController {
   }
 }
 
+/// An embeddable single- or multi-selection workflow.
+///
+/// Unlike the modal helpers, this widget does not create or close a route.
+/// Use [onSelected], [onSelectionChanged], and [onConfirmed] to receive
+/// changes. The modal helpers use the same widget internally.
 class SelectionSheetView<T> extends StatefulWidget {
+  /// Creates an embeddable single-selection workflow.
   const SelectionSheetView.single({
     required this.itemLabelBuilder,
-    required this.searchable,
-    required this.searchDebounceDuration,
-    required this.pageSize,
-    required this.stickySectionHeaders,
-    required this.layout,
-    required this.gridDelegate,
-    required this.enablePullToRefresh,
-    required this.theme,
-    required this.scrollController,
     this.items,
     this.loadItems,
+    this.pageSize = 20,
     this.title,
     this.initialValue,
+    this.searchable = false,
+    this.searchDebounceDuration,
     this.searchHintText,
+    this.searchFieldBuilder,
     this.itemBuilder,
     this.isItemEnabled,
     this.itemEquals,
+    this.itemKeyBuilder,
     this.sectionBuilder,
     this.sectionLabelBuilder,
     this.sectionHeaderBuilder,
+    this.stickySectionHeaders = true,
+    this.layout,
+    this.gridDelegate,
+    this.enablePullToRefresh = true,
     this.loadingBuilder,
     this.emptyBuilder,
     this.errorBuilder,
     this.loadingMoreBuilder,
     this.loadMoreErrorBuilder,
     this.controller,
+    this.theme,
+    this.scrollController,
+    this.onSelected,
+    this.popOnComplete = false,
     super.key,
-  })  : isMulti = false,
+  })  : assert((items == null) != (loadItems == null)),
+        assert(pageSize > 0),
+        isMulti = false,
         initialSelection = const [],
         doneLabel = null,
         showSelectedChips = false,
-        selectedChipBuilder = null;
+        selectedChipBuilder = null,
+        onSelectionChanged = null,
+        onConfirmed = null;
 
+  /// Creates an embeddable multi-selection workflow.
   const SelectionSheetView.multi({
     required this.itemLabelBuilder,
-    required this.searchable,
-    required this.searchDebounceDuration,
-    required this.pageSize,
-    required this.stickySectionHeaders,
-    required this.layout,
-    required this.gridDelegate,
-    required this.showSelectedChips,
-    required this.enablePullToRefresh,
-    required this.theme,
-    required this.scrollController,
-    required this.initialSelection,
     this.items,
     this.loadItems,
+    this.pageSize = 20,
     this.title,
+    this.initialSelection = const [],
+    this.searchable = false,
+    this.searchDebounceDuration,
     this.searchHintText,
+    this.searchFieldBuilder,
     this.doneLabel,
     this.itemBuilder,
     this.isItemEnabled,
     this.itemEquals,
+    this.itemKeyBuilder,
     this.sectionBuilder,
     this.sectionLabelBuilder,
     this.sectionHeaderBuilder,
+    this.stickySectionHeaders = true,
+    this.layout,
+    this.gridDelegate,
+    this.showSelectedChips,
+    this.enablePullToRefresh = true,
     this.selectedChipBuilder,
     this.loadingBuilder,
     this.emptyBuilder,
@@ -100,9 +115,17 @@ class SelectionSheetView<T> extends StatefulWidget {
     this.loadingMoreBuilder,
     this.loadMoreErrorBuilder,
     this.controller,
+    this.theme,
+    this.scrollController,
+    this.onSelectionChanged,
+    this.onConfirmed,
+    this.popOnComplete = false,
     super.key,
-  })  : isMulti = true,
-        initialValue = null;
+  })  : assert((items == null) != (loadItems == null)),
+        assert(pageSize > 0),
+        isMulti = true,
+        initialValue = null,
+        onSelected = null;
 
   final List<T>? items;
   final SelectionSheetPageLoader<T>? loadItems;
@@ -113,18 +136,20 @@ class SelectionSheetView<T> extends StatefulWidget {
   final Iterable<T> initialSelection;
   final bool searchable;
   final String? searchHintText;
-  final Duration searchDebounceDuration;
+  final SelectionSheetSearchFieldBuilder? searchFieldBuilder;
+  final Duration? searchDebounceDuration;
   final String? doneLabel;
   final SelectionSheetItemBuilder<T>? itemBuilder;
   final bool Function(T item)? isItemEnabled;
   final SelectionItemEquality<T>? itemEquals;
+  final SelectionItemKeyBuilder<T>? itemKeyBuilder;
   final SelectionSheetSectionBuilder<T>? sectionBuilder;
   final SelectionSheetSectionLabelBuilder? sectionLabelBuilder;
   final SelectionSheetSectionHeaderBuilder? sectionHeaderBuilder;
   final bool stickySectionHeaders;
-  final SelectionSheetLayout layout;
-  final SliverGridDelegate gridDelegate;
-  final bool showSelectedChips;
+  final SelectionSheetLayout? layout;
+  final SliverGridDelegate? gridDelegate;
+  final bool? showSelectedChips;
   final SelectionSheetSelectedChipBuilder<T>? selectedChipBuilder;
   final SelectionSheetLoadingBuilder? loadingBuilder;
   final SelectionSheetEmptyBuilder? emptyBuilder;
@@ -133,9 +158,13 @@ class SelectionSheetView<T> extends StatefulWidget {
   final SelectionSheetErrorBuilder? loadMoreErrorBuilder;
   final SelectionSheetController? controller;
   final bool enablePullToRefresh;
-  final SelectionSheetThemeData theme;
-  final ScrollController scrollController;
+  final SelectionSheetThemeData? theme;
+  final ScrollController? scrollController;
   final bool isMulti;
+  final ValueChanged<T>? onSelected;
+  final ValueChanged<List<T>>? onSelectionChanged;
+  final ValueChanged<List<T>>? onConfirmed;
+  final bool popOnComplete;
 
   bool get isRemote => loadItems != null;
 
@@ -144,9 +173,15 @@ class SelectionSheetView<T> extends StatefulWidget {
 }
 
 class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
+  late SelectionSheetThemeData _theme;
+  late final ScrollController _scrollController;
+  late final bool _ownsScrollController;
   late final TextEditingController _searchController;
+  late final FocusNode _searchFocusNode;
   late List<T> _selection;
+  Set<Object>? _selectionKeys;
   late List<T> _items;
+  Set<Object>? _itemKeys;
   Timer? _searchDebounceTimer;
   String _query = '';
 
@@ -166,15 +201,41 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
     return platform == TargetPlatform.iOS || platform == TargetPlatform.macOS;
   }
 
+  Duration get _searchDebounceDuration =>
+      widget.searchDebounceDuration ?? _theme.searchDebounceDuration;
+
+  SelectionSheetLayout get _layout => widget.layout ?? _theme.layout;
+
+  SliverGridDelegate get _gridDelegate =>
+      widget.gridDelegate ?? _theme.gridDelegate;
+
+  bool get _showSelectedChips =>
+      widget.showSelectedChips ?? _theme.showSelectedChips;
+
   @override
   void initState() {
     super.initState();
+    _ownsScrollController = widget.scrollController == null;
+    _scrollController = widget.scrollController ?? ScrollController();
     _searchController = TextEditingController();
-    _selection = widget.isMulti
-        ? List<T>.of(widget.initialSelection)
-        : <T>[if (widget.initialValue case final value?) value];
-    _items = List<T>.of(widget.items ?? const []);
-    widget.scrollController.addListener(_handleScroll);
+    _searchFocusNode = FocusNode();
+    _selection = _deduplicateByKey(
+      widget.isMulti
+          ? List<T>.of(widget.initialSelection)
+          : <T>[if (widget.initialValue case final value?) value],
+    );
+    if (widget.itemKeyBuilder != null) {
+      _selectionKeys = {
+        for (final item in _selection) widget.itemKeyBuilder!(item),
+      };
+    }
+    _items = _deduplicateByKey(widget.items ?? const []);
+    if (widget.itemKeyBuilder != null) {
+      _itemKeys = {
+        for (final item in _items) widget.itemKeyBuilder!(item),
+      };
+    }
+    _scrollController.addListener(_handleScroll);
 
     if (widget.isRemote) {
       Future<void> refresh() => _reloadRemote();
@@ -187,6 +248,12 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _theme = widget.theme ?? SelectionSheetTheme.of(context);
+  }
+
+  @override
   void dispose() {
     _requestGeneration++;
     _cancelActiveRequests();
@@ -194,17 +261,34 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
     if (_attachedRefresh case final refresh?) {
       widget.controller?._detach(refresh);
     }
-    widget.scrollController.removeListener(_handleScroll);
+    _scrollController.removeListener(_handleScroll);
+    if (_ownsScrollController) _scrollController.dispose();
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
   bool _equals(T first, T second) {
+    if (widget.itemKeyBuilder case final keyBuilder?) {
+      return keyBuilder(first) == keyBuilder(second);
+    }
     return widget.itemEquals?.call(first, second) ?? first == second;
   }
 
   bool _isSelected(T item) {
+    if (_selectionKeys case final keys?) {
+      return keys.contains(widget.itemKeyBuilder!(item));
+    }
     return _selection.any((selected) => _equals(selected, item));
+  }
+
+  List<T> _deduplicateByKey(Iterable<T> items) {
+    if (widget.itemKeyBuilder == null) return List<T>.of(items);
+    final keys = <Object>{};
+    return [
+      for (final item in items)
+        if (keys.add(widget.itemKeyBuilder!(item))) item,
+    ];
   }
 
   List<T> get _visibleItems {
@@ -235,7 +319,12 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
         return;
       }
       setState(() {
-        _items = List<T>.of(page.items);
+        _items = _deduplicateByKey(page.items);
+        if (_itemKeys case final keys?) {
+          keys
+            ..clear()
+            ..addAll(_items.map(widget.itemKeyBuilder!));
+        }
         _nextPage = 2;
         _nextCursor = page.nextCursor;
         _hasMore = page.hasMore;
@@ -276,15 +365,15 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
   }
 
   void _handleScroll() {
-    if (!widget.scrollController.hasClients) return;
-    if (widget.scrollController.position.extentAfter < 240) {
+    if (!_scrollController.hasClients) return;
+    if (_scrollController.position.extentAfter < 240) {
       _loadNextPage();
     }
   }
 
   void _schedulePaginationCheck() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !widget.scrollController.hasClients) return;
+      if (!mounted || !_scrollController.hasClients) return;
       _handleScroll();
     });
   }
@@ -329,7 +418,13 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
         return;
       }
       setState(() {
-        _items.addAll(page.items);
+        if (_itemKeys case final keys?) {
+          for (final item in page.items) {
+            if (keys.add(widget.itemKeyBuilder!(item))) _items.add(item);
+          }
+        } else {
+          _items.addAll(page.items);
+        }
         _nextPage = requestedPage + 1;
         _nextCursor = page.nextCursor;
         _hasMore = page.hasMore;
@@ -377,31 +472,49 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
     if (widget.isItemEnabled?.call(item) == false) return;
 
     if (!widget.isMulti) {
-      Navigator.of(context).pop<T>(item);
+      setState(() {
+        _selection = [item];
+        if (_selectionKeys case final keys?) {
+          keys
+            ..clear()
+            ..add(widget.itemKeyBuilder!(item));
+        }
+      });
+      widget.onSelected?.call(item);
+      if (widget.popOnComplete) {
+        Navigator.of(context).pop<T>(item);
+      }
       return;
     }
 
     setState(() {
-      final index = _selection.indexWhere(
-        (selected) => _equals(selected, item),
-      );
-      if (index == -1) {
+      final key = widget.itemKeyBuilder?.call(item);
+      final isSelected =
+          key == null ? _isSelected(item) : _selectionKeys!.contains(key);
+      if (!isSelected) {
         _selection.add(item);
+        if (key != null) _selectionKeys!.add(key);
       } else {
-        _selection.removeAt(index);
+        _selection.removeWhere((selected) => _equals(selected, item));
+        if (key != null) _selectionKeys!.remove(key);
       }
     });
+    widget.onSelectionChanged?.call(List<T>.unmodifiable(_selection));
   }
 
   void _removeSelection(T item) {
     setState(() {
       _selection.removeWhere((selected) => _equals(selected, item));
+      if (_selectionKeys case final keys?) {
+        keys.remove(widget.itemKeyBuilder!(item));
+      }
     });
+    widget.onSelectionChanged?.call(List<T>.unmodifiable(_selection));
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
+    final theme = _theme;
     final mediaQuery = MediaQuery.of(context);
     return AnimatedPadding(
       duration: const Duration(milliseconds: 180),
@@ -419,10 +532,9 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
               if (theme.showDragHandle)
                 _DragHandle(color: theme.dragHandleColor),
               _buildHeader(context),
-              if (widget.searchable) _buildSearch(context),
-              if (widget.isMulti &&
-                  widget.showSelectedChips &&
-                  _selection.isNotEmpty)
+              if (widget.searchable || widget.searchFieldBuilder != null)
+                _buildSearch(context),
+              if (widget.isMulti && _showSelectedChips && _selection.isNotEmpty)
                 _buildSelectedChips(context),
               Expanded(child: _buildBody(context)),
             ],
@@ -453,11 +565,13 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
           if (widget.isMulti)
             _AdaptiveTextButton(
               onPressed: () {
-                Navigator.of(context).pop<List<T>>(
-                  List<T>.unmodifiable(_selection),
-                );
+                final result = List<T>.unmodifiable(_selection);
+                widget.onConfirmed?.call(result);
+                if (widget.popOnComplete) {
+                  Navigator.of(context).pop<List<T>>(result);
+                }
               },
-              label: widget.doneLabel ?? widget.theme.doneLabel,
+              label: widget.doneLabel ?? _theme.doneLabel,
               cupertino: _isCupertino,
             ),
         ],
@@ -466,44 +580,61 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
   }
 
   Widget _buildSearch(BuildContext context) {
-    final hint = widget.searchHintText ?? widget.theme.searchHintText;
+    final hint = widget.searchHintText ?? _theme.searchHintText;
+    final customBuilder =
+        widget.searchFieldBuilder ?? _theme.searchFieldBuilder;
     return Padding(
-      padding: widget.theme.searchPadding,
-      child: _isCupertino
-          ? CupertinoSearchTextField(
+      padding: _theme.searchPadding,
+      child: customBuilder?.call(
+            context,
+            SelectionSheetSearchFieldData(
               controller: _searchController,
-              placeholder: hint,
+              focusNode: _searchFocusNode,
+              hintText: hint,
+              query: _query,
               onChanged: _scheduleQueryUpdate,
-            )
-          : TextField(
-              controller: _searchController,
-              onChanged: _scheduleQueryUpdate,
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                hintText: hint,
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _query.isEmpty
-                    ? null
-                    : IconButton(
-                        tooltip: 'Clear search',
-                        onPressed: () {
-                          _searchController.clear();
-                          _searchDebounceTimer?.cancel();
-                          _applyQuery('');
-                        },
-                        icon: const Icon(Icons.clear),
-                      ),
-                border: const OutlineInputBorder(),
-              ),
+              onClear: _clearSearch,
             ),
+          ) ??
+          (_isCupertino
+              ? CupertinoSearchTextField(
+                  controller: _searchController,
+                  focusNode: _searchFocusNode,
+                  placeholder: hint,
+                  onChanged: _scheduleQueryUpdate,
+                )
+              : TextField(
+                  controller: _searchController,
+                  focusNode: _searchFocusNode,
+                  onChanged: _scheduleQueryUpdate,
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    hintText: hint,
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _query.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: 'Clear search',
+                            onPressed: _clearSearch,
+                            icon: const Icon(Icons.clear),
+                          ),
+                    border: const OutlineInputBorder(),
+                  ),
+                )),
     );
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    _searchDebounceTimer?.cancel();
+    _applyQuery('');
   }
 
   Widget _buildSelectedChips(BuildContext context) {
     return Padding(
-      padding: widget.theme.selectedChipsPadding,
+      padding: _theme.selectedChipsPadding,
       child: SizedBox(
-        height: widget.theme.selectedChipsHeight,
+        height: _theme.selectedChipsHeight,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           itemCount: _selection.length,
@@ -530,12 +661,12 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
 
   void _scheduleQueryUpdate(String value) {
     _searchDebounceTimer?.cancel();
-    if (widget.searchDebounceDuration == Duration.zero) {
+    if (_searchDebounceDuration == Duration.zero) {
       _applyQuery(value);
       return;
     }
     _searchDebounceTimer = Timer(
-      widget.searchDebounceDuration,
+      _searchDebounceDuration,
       () => _applyQuery(value),
     );
   }
@@ -555,7 +686,7 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
   Widget _buildBody(BuildContext context) {
     if (_loadingInitial) {
       final custom = widget.loadingBuilder?.call(context) ??
-          widget.theme.loadingBuilder?.call(context);
+          _theme.loadingBuilder?.call(context);
       return custom == null
           ? const Center(child: CircularProgressIndicator())
           : Center(child: custom);
@@ -564,11 +695,11 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
     if (_initialError case final error?) {
       final retry = _reloadRemote;
       final custom = widget.errorBuilder?.call(context, error, retry) ??
-          widget.theme.errorBuilder?.call(context, error, retry);
+          _theme.errorBuilder?.call(context, error, retry);
       return custom == null
           ? _DefaultErrorState(
-              message: widget.theme.errorLabel,
-              retryLabel: widget.theme.retryLabel,
+              message: _theme.errorLabel,
+              retryLabel: _theme.retryLabel,
               onRetry: retry,
             )
           : Center(child: custom);
@@ -577,13 +708,13 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
     final items = _visibleItems;
     if (items.isEmpty) {
       final custom = widget.emptyBuilder?.call(context, _query) ??
-          widget.theme.emptyBuilder?.call(context, _query);
+          _theme.emptyBuilder?.call(context, _query);
       return custom == null
           ? Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
-                  widget.theme.emptyLabel,
+                  _theme.emptyLabel,
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
@@ -600,7 +731,7 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
     if (widget.sectionBuilder == null) {
       slivers.add(
         SliverPadding(
-          padding: widget.theme.contentPadding,
+          padding: _theme.contentPadding,
           sliver: _buildItemSliver(items),
         ),
       );
@@ -610,14 +741,14 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
           SliverPersistentHeader(
             pinned: widget.stickySectionHeaders,
             delegate: _SectionHeaderDelegate(
-              height: widget.theme.sectionHeaderHeight,
+              height: _theme.sectionHeaderHeight,
               child: _buildSectionHeader(context, section),
             ),
           ),
         );
         slivers.add(
           SliverPadding(
-            padding: widget.theme.itemPadding,
+            padding: _theme.itemPadding,
             sliver: _buildItemSliver(section.items, applyItemPadding: false),
           ),
         );
@@ -625,7 +756,7 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
       slivers.add(
         SliverPadding(
           padding: EdgeInsets.only(
-            bottom: widget.theme.contentPadding
+            bottom: _theme.contentPadding
                 .resolve(Directionality.of(context))
                 .bottom,
           ),
@@ -640,7 +771,7 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
     }
 
     final scrollView = CustomScrollView(
-      controller: widget.scrollController,
+      controller: _scrollController,
       physics: widget.isRemote && widget.enablePullToRefresh
           ? const AlwaysScrollableScrollPhysics()
           : null,
@@ -658,21 +789,21 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
     List<T> items, {
     bool applyItemPadding = true,
   }) {
-    if (widget.layout == SelectionSheetLayout.grid) {
+    if (_layout == SelectionSheetLayout.grid) {
       return SliverGrid(
-        gridDelegate: widget.gridDelegate,
+        gridDelegate: _gridDelegate,
         delegate: SliverChildBuilderDelegate(
           (context, index) {
             final child = _buildItem(context, items[index]);
             if (!applyItemPadding) return child;
-            return Padding(padding: widget.theme.itemPadding, child: child);
+            return Padding(padding: _theme.itemPadding, child: child);
           },
           childCount: items.length,
         ),
       );
     }
 
-    final showDividers = widget.theme.showDividers;
+    final showDividers = _theme.showDividers;
     final childCount = showDividers ? items.length * 2 - 1 : items.length;
     return SliverList(
       delegate: SliverChildBuilderDelegate(
@@ -683,7 +814,7 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
           final itemIndex = showDividers ? index ~/ 2 : index;
           final child = _buildItem(context, items[itemIndex]);
           if (!applyItemPadding) return child;
-          return Padding(padding: widget.theme.itemPadding, child: child);
+          return Padding(padding: _theme.itemPadding, child: child);
         },
         childCount: childCount,
       ),
@@ -716,9 +847,9 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
     _SectionGroup<T> section,
   ) {
     return widget.sectionHeaderBuilder?.call(context, section.data) ??
-        widget.theme.sectionHeaderBuilder?.call(context, section.data) ??
+        _theme.sectionHeaderBuilder?.call(context, section.data) ??
         ColoredBox(
-          color: widget.theme.backgroundColor ?? Colors.transparent,
+          color: _theme.backgroundColor ?? Colors.transparent,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Align(
@@ -735,7 +866,7 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
   Widget _buildPaginationFooter(BuildContext context) {
     if (_loadingMore) {
       return widget.loadingMoreBuilder?.call(context) ??
-          widget.theme.loadingMoreBuilder?.call(context) ??
+          _theme.loadingMoreBuilder?.call(context) ??
           const Padding(
             padding: EdgeInsets.all(16),
             child: Center(child: CircularProgressIndicator()),
@@ -745,14 +876,14 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
     final error = _loadMoreError!;
     final retry = _retryNextPage;
     return widget.loadMoreErrorBuilder?.call(context, error, retry) ??
-        widget.theme.loadMoreErrorBuilder?.call(context, error, retry) ??
+        _theme.loadMoreErrorBuilder?.call(context, error, retry) ??
         Padding(
           padding: const EdgeInsets.all(12),
           child: Center(
             child: TextButton.icon(
               onPressed: retry,
               icon: const Icon(Icons.refresh),
-              label: Text(widget.theme.retryLabel),
+              label: Text(_theme.retryLabel),
             ),
           ),
         );
@@ -773,11 +904,11 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
       enabled: enabled,
       multi: widget.isMulti,
       cupertino: _isCupertino,
-      selectedColor: widget.theme.selectedColor,
+      selectedColor: _theme.selectedColor,
     );
 
     final child = widget.itemBuilder?.call(context, item, state) ??
-        widget.theme.itemBuilder?.call(
+        _theme.itemBuilder?.call(
           context,
           SelectionSheetItemData(
             item: item,

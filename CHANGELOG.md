@@ -1,3 +1,16 @@
+## 0.5.0
+
+- Adds stable item identity with `itemKeyBuilder` for selection matching and
+  pagination deduplication.
+- Adds custom search inputs with global theme defaults and per-sheet overrides.
+- Exposes `SelectionSheetView<T>` for embedded single and multi-selection
+  workflows.
+- Propagates item identity and custom search inputs through native form fields.
+- Adds the optional `SelectionSheetViewItem<T>` configuration object to
+  `showSingle` and `showMulti`.
+- Refreshes the example app with interactive form, modal, remote grid, custom
+  search, and embedded-view demonstrations.
+
 ## 0.4.0
 
 - Adds cooperative cancellation tokens to every async page request.

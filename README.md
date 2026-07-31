@@ -7,6 +7,9 @@ and remote search, pagination, grouped results, draggable heights, keyboard
 avoidance, Material/Cupertino adaptation, and a theming system that supports
 both global defaults and per-sheet overrides.
 
+The [example app](example/) is an interactive 0.5.0 showcase covering form,
+modal, remote paginated, custom-search, and embedded selection workflows.
+
 ## Single selection
 
 ```dart
@@ -20,6 +23,32 @@ final country = await SelectionSheet.showSingle<Country>(
 );
 ```
 
+### Optional view configuration
+
+Both modal helpers accept an optional `SelectionSheetViewItem<T>`. It groups
+the source and common view values when that is more convenient:
+
+```dart
+final country = await SelectionSheet.showSingle<Country>(
+  context: context,
+  item: SelectionSheetViewItem(
+    items: countries,
+    initialValue: selectedCountry,
+    pageSize: 20,
+    title: 'Country',
+    hintText: 'Search countries',
+  ),
+  searchable: true,
+  itemLabelBuilder: (country) => country.name,
+  itemKeyBuilder: (country) => country.code,
+);
+```
+
+For `showMulti`, use `initialSelection` instead of `initialValue`. The
+configuration object is not required: all existing direct arguments continue
+to work. When both forms provide the same value, the direct helper argument
+takes precedence.
+
 Search uses a 300 ms debounce by default. Override it for an individual sheet
 with `searchDebounceDuration`, or configure it globally:
 
@@ -30,6 +59,42 @@ SelectionSheetThemeData.fallback(context).copyWith(
 ```
 
 Use `Duration.zero` when filtering should happen immediately.
+
+### Custom search input
+
+Provide `searchFieldBuilder` to replace the built-in Material or Cupertino
+search input. The builder receives the controller, focus node, resolved hint,
+current debounced query, and the callbacks that keep filtering in sync:
+
+```dart
+SelectionSheet.showSingle<Country>(
+  context: context,
+  items: countries,
+  itemLabelBuilder: (country) => country.name,
+  searchFieldBuilder: (context, search) {
+    return TextField(
+      controller: search.controller,
+      focusNode: search.focusNode,
+      onChanged: search.onChanged,
+      decoration: InputDecoration(
+        hintText: search.hintText,
+        prefixIcon: const Icon(Icons.travel_explore),
+        suffixIcon: search.query.isEmpty
+            ? null
+            : IconButton(
+                onPressed: search.onClear,
+                icon: const Icon(Icons.clear),
+              ),
+      ),
+    );
+  },
+);
+```
+
+A per-sheet builder enables search automatically. Configure
+`searchFieldBuilder` in `SelectionSheetThemeData` for a global search design;
+globally configured builders are used by sheets that set `searchable: true`.
+A per-sheet builder always takes precedence over the global builder.
 
 ## Remote search and pagination
 
@@ -145,6 +210,32 @@ selectedChipBuilder: (context, country, label, onDeleted) {
   );
 },
 ```
+
+## Embedded selection view
+
+Use `SelectionSheetView<T>` when the selection workflow belongs inside an
+existing page, dialog, side panel, or custom sheet instead of opening a modal:
+
+```dart
+SelectionSheetView<Country>.multi(
+  title: 'Countries',
+  items: countries,
+  initialSelection: selectedCountries,
+  searchable: true,
+  itemLabelBuilder: (country) => country.name,
+  itemKeyBuilder: (country) => country.id,
+  onSelectionChanged: (value) {
+    setState(() => selectedCountries = value);
+  },
+  onConfirmed: saveCountries,
+);
+```
+
+The `.single` constructor uses `initialValue` and `onSelected`. The `.multi`
+constructor uses `initialSelection`, `onSelectionChanged`, and `onConfirmed`.
+The embedded view does not pop a route when an item is selected or Done is
+pressed. It accepts the same local/remote source, search, pagination, sections,
+grid, state builders, theme, and controller options as the modal workflow.
 
 ## Sections and sticky headers
 
@@ -265,6 +356,20 @@ final country = await SelectionSheet.showSingle<Country>(
   },
 );
 ```
+
+### Stable item identity
+
+For model objects, especially remotely loaded or paginated data, provide
+`itemKeyBuilder`:
+
+```dart
+itemKeyBuilder: (country) => country.id,
+```
+
+The key is used to match initial selections with newly loaded model instances,
+check selected state efficiently, remove selections, and deduplicate repeated
+items across pages. When provided, it takes precedence over `itemEquals`.
+Keys must be stable and unique within the data source.
 
 ## Global design
 

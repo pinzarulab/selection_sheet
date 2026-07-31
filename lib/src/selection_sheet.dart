@@ -14,17 +14,20 @@ abstract final class SelectionSheet {
   static Future<T?> showSingle<T>({
     required BuildContext context,
     required SelectionItemLabelBuilder<T> itemLabelBuilder,
+    SelectionSheetViewItem<T>? item,
     List<T>? items,
     SelectionSheetPageLoader<T>? loadItems,
-    int pageSize = 20,
+    int? pageSize,
     String? title,
     T? initialValue,
     bool searchable = false,
     String? searchHintText,
     Duration? searchDebounceDuration,
+    SelectionSheetSearchFieldBuilder? searchFieldBuilder,
     SelectionSheetItemBuilder<T>? itemBuilder,
     bool Function(T item)? isItemEnabled,
     SelectionItemEquality<T>? itemEquals,
+    SelectionItemKeyBuilder<T>? itemKeyBuilder,
     SelectionSheetSectionBuilder<T>? sectionBuilder,
     SelectionSheetSectionLabelBuilder? sectionLabelBuilder,
     SelectionSheetSectionHeaderBuilder? sectionHeaderBuilder,
@@ -44,7 +47,14 @@ abstract final class SelectionSheet {
     bool useRootNavigator = false,
     bool isDismissible = true,
   }) {
-    _validateSource(items, loadItems, pageSize);
+    final hasDirectSource = items != null || loadItems != null;
+    final resolvedItems = hasDirectSource ? items : item?.items;
+    final resolvedLoadItems = hasDirectSource ? loadItems : item?.loadItems;
+    final resolvedPageSize = pageSize ?? item?.pageSize ?? 20;
+    final resolvedTitle = title ?? item?.title;
+    final resolvedInitialValue = initialValue ?? item?.initialValue;
+    final resolvedSearchHintText = searchHintText ?? item?.hintText;
+    _validateSource(resolvedItems, resolvedLoadItems, resolvedPageSize);
     final resolvedTheme = theme ?? SelectionSheetTheme.of(context);
     return _show<T>(
       context: context,
@@ -54,21 +64,23 @@ abstract final class SelectionSheet {
       theme: resolvedTheme,
       builder: (sheetContext, scrollController) {
         return SelectionSheetView<T>.single(
-          items: items,
-          loadItems: loadItems,
-          pageSize: pageSize,
+          items: resolvedItems,
+          loadItems: resolvedLoadItems,
+          pageSize: resolvedPageSize,
           itemLabelBuilder: itemLabelBuilder,
-          title: title,
-          initialValue: initialValue,
-          searchable: searchable,
-          searchHintText: searchHintText,
+          title: resolvedTitle,
+          initialValue: resolvedInitialValue,
+          searchable: searchable || searchFieldBuilder != null,
+          searchHintText: resolvedSearchHintText,
           searchDebounceDuration: _resolveSearchDebounceDuration(
             searchDebounceDuration,
             resolvedTheme,
           ),
+          searchFieldBuilder: searchFieldBuilder,
           itemBuilder: itemBuilder,
           isItemEnabled: isItemEnabled,
           itemEquals: itemEquals,
+          itemKeyBuilder: itemKeyBuilder,
           sectionBuilder: sectionBuilder,
           sectionLabelBuilder: sectionLabelBuilder,
           sectionHeaderBuilder: sectionHeaderBuilder,
@@ -84,6 +96,7 @@ abstract final class SelectionSheet {
           enablePullToRefresh: enablePullToRefresh,
           theme: resolvedTheme,
           scrollController: scrollController,
+          popOnComplete: true,
         );
       },
     );
@@ -97,18 +110,21 @@ abstract final class SelectionSheet {
   static Future<List<T>?> showMulti<T>({
     required BuildContext context,
     required SelectionItemLabelBuilder<T> itemLabelBuilder,
+    SelectionSheetViewItem<T>? item,
     List<T>? items,
     SelectionSheetPageLoader<T>? loadItems,
-    int pageSize = 20,
+    int? pageSize,
     String? title,
-    Iterable<T> initialSelection = const [],
+    Iterable<T>? initialSelection,
     bool searchable = false,
     String? searchHintText,
     Duration? searchDebounceDuration,
+    SelectionSheetSearchFieldBuilder? searchFieldBuilder,
     String? doneLabel,
     SelectionSheetItemBuilder<T>? itemBuilder,
     bool Function(T item)? isItemEnabled,
     SelectionItemEquality<T>? itemEquals,
+    SelectionItemKeyBuilder<T>? itemKeyBuilder,
     SelectionSheetSectionBuilder<T>? sectionBuilder,
     SelectionSheetSectionLabelBuilder? sectionLabelBuilder,
     SelectionSheetSectionHeaderBuilder? sectionHeaderBuilder,
@@ -130,7 +146,15 @@ abstract final class SelectionSheet {
     bool useRootNavigator = false,
     bool isDismissible = true,
   }) {
-    _validateSource(items, loadItems, pageSize);
+    final hasDirectSource = items != null || loadItems != null;
+    final resolvedItems = hasDirectSource ? items : item?.items;
+    final resolvedLoadItems = hasDirectSource ? loadItems : item?.loadItems;
+    final resolvedPageSize = pageSize ?? item?.pageSize ?? 20;
+    final resolvedTitle = title ?? item?.title;
+    final resolvedInitialSelection =
+        initialSelection ?? item?.initialSelection ?? const [];
+    final resolvedSearchHintText = searchHintText ?? item?.hintText;
+    _validateSource(resolvedItems, resolvedLoadItems, resolvedPageSize);
     final resolvedTheme = theme ?? SelectionSheetTheme.of(context);
     return _show<List<T>>(
       context: context,
@@ -140,22 +164,24 @@ abstract final class SelectionSheet {
       theme: resolvedTheme,
       builder: (sheetContext, scrollController) {
         return SelectionSheetView<T>.multi(
-          items: items,
-          loadItems: loadItems,
-          pageSize: pageSize,
+          items: resolvedItems,
+          loadItems: resolvedLoadItems,
+          pageSize: resolvedPageSize,
           itemLabelBuilder: itemLabelBuilder,
-          title: title,
-          initialSelection: initialSelection,
-          searchable: searchable,
-          searchHintText: searchHintText,
+          title: resolvedTitle,
+          initialSelection: resolvedInitialSelection,
+          searchable: searchable || searchFieldBuilder != null,
+          searchHintText: resolvedSearchHintText,
           searchDebounceDuration: _resolveSearchDebounceDuration(
             searchDebounceDuration,
             resolvedTheme,
           ),
+          searchFieldBuilder: searchFieldBuilder,
           doneLabel: doneLabel,
           itemBuilder: itemBuilder,
           isItemEnabled: isItemEnabled,
           itemEquals: itemEquals,
+          itemKeyBuilder: itemKeyBuilder,
           sectionBuilder: sectionBuilder,
           sectionLabelBuilder: sectionLabelBuilder,
           sectionHeaderBuilder: sectionHeaderBuilder,
@@ -174,6 +200,7 @@ abstract final class SelectionSheet {
           enablePullToRefresh: enablePullToRefresh,
           theme: resolvedTheme,
           scrollController: scrollController,
+          popOnComplete: true,
         );
       },
     );

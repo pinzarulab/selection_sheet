@@ -49,6 +49,7 @@ class SelectionSheetThemeData {
     this.contentPadding = const EdgeInsets.only(bottom: 12),
     this.searchPadding = const EdgeInsets.fromLTRB(16, 8, 16, 8),
     this.searchDebounceDuration = const Duration(milliseconds: 300),
+    this.searchFieldBuilder,
     this.itemBuilder,
     this.sectionHeaderBuilder,
     this.loadingBuilder,
@@ -127,6 +128,9 @@ class SelectionSheetThemeData {
   ///
   /// Set this to [Duration.zero] to disable debouncing globally.
   final Duration searchDebounceDuration;
+
+  /// Optional application-wide search input.
+  final SelectionSheetSearchFieldBuilder? searchFieldBuilder;
 
   /// Optional application-wide item renderer.
   final SelectionSheetGlobalItemBuilder? itemBuilder;
@@ -208,6 +212,8 @@ class SelectionSheetThemeData {
     EdgeInsetsGeometry? contentPadding,
     EdgeInsetsGeometry? searchPadding,
     Duration? searchDebounceDuration,
+    SelectionSheetSearchFieldBuilder? searchFieldBuilder,
+    bool clearSearchFieldBuilder = false,
     SelectionSheetGlobalItemBuilder? itemBuilder,
     bool clearItemBuilder = false,
     SelectionSheetSectionHeaderBuilder? sectionHeaderBuilder,
@@ -245,6 +251,9 @@ class SelectionSheetThemeData {
       searchPadding: searchPadding ?? this.searchPadding,
       searchDebounceDuration:
           searchDebounceDuration ?? this.searchDebounceDuration,
+      searchFieldBuilder: clearSearchFieldBuilder
+          ? null
+          : searchFieldBuilder ?? this.searchFieldBuilder,
       itemBuilder: clearItemBuilder ? null : itemBuilder ?? this.itemBuilder,
       sectionHeaderBuilder: clearSectionHeaderBuilder
           ? null
@@ -286,6 +295,7 @@ class SelectionSheetThemeData {
             other.contentPadding == contentPadding &&
             other.searchPadding == searchPadding &&
             other.searchDebounceDuration == searchDebounceDuration &&
+            other.searchFieldBuilder == searchFieldBuilder &&
             other.itemBuilder == itemBuilder &&
             other.sectionHeaderBuilder == sectionHeaderBuilder &&
             other.loadingBuilder == loadingBuilder &&
@@ -322,6 +332,7 @@ class SelectionSheetThemeData {
         contentPadding,
         searchPadding,
         searchDebounceDuration,
+        searchFieldBuilder,
         itemBuilder,
         sectionHeaderBuilder,
         loadingBuilder,

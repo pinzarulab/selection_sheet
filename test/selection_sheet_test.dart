@@ -28,6 +28,40 @@ void main() {
     expect(result, 'Germany');
   });
 
+  testWidgets('view item supplies optional single-sheet configuration', (
+    tester,
+  ) async {
+    String? result;
+    await tester.pumpWidget(
+      _TestApp(
+        onPressed: (context) async {
+          result = await SelectionSheet.showSingle<String>(
+            context: context,
+            item: const SelectionSheetViewItem(
+              items: ['France', 'Germany'],
+              initialValue: 'France',
+              title: 'Configured country',
+              hintText: 'Configured search',
+            ),
+            searchable: true,
+            searchDebounceDuration: Duration.zero,
+            itemLabelBuilder: (item) => item,
+          );
+        },
+      ),
+    );
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Configured country'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Configured search'), findsOneWidget);
+
+    await tester.tap(find.text('Germany'));
+    await tester.pumpAndSettle();
+    expect(result, 'Germany');
+  });
+
   testWidgets('search filters items and shows the empty state', (tester) async {
     await tester.pumpWidget(
       _TestApp(
@@ -93,6 +127,55 @@ void main() {
     expect(find.text('Ukraine'), findsOneWidget);
   });
 
+  testWidgets('custom search field overrides the global builder', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _TestApp(
+        theme: SelectionSheetThemeData(
+          searchDebounceDuration: Duration.zero,
+          searchFieldBuilder: (context, search) {
+            return const Text('Global search');
+          },
+        ),
+        onPressed: (context) {
+          SelectionSheet.showSingle<String>(
+            context: context,
+            items: const ['France', 'Ukraine'],
+            itemLabelBuilder: (item) => item,
+            searchFieldBuilder: (context, search) {
+              return TextField(
+                key: const Key('custom-search'),
+                controller: search.controller,
+                focusNode: search.focusNode,
+                onChanged: search.onChanged,
+                decoration: InputDecoration(
+                  hintText: search.hintText,
+                  suffixIcon: IconButton(
+                    onPressed: search.onClear,
+                    icon: const Icon(Icons.close),
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('custom-search')), findsOneWidget);
+    expect(find.text('Global search'), findsNothing);
+
+    await tester.enterText(find.byKey(const Key('custom-search')), 'ukr');
+    await tester.pump();
+
+    expect(find.text('Ukraine'), findsOneWidget);
+    expect(find.text('France'), findsNothing);
+  });
+
   testWidgets('multi selection commits only when Done is pressed', (
     tester,
   ) async {
@@ -112,6 +195,48 @@ void main() {
 
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Germany'));
+    await tester.pump();
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+
+    expect(result, ['France', 'Germany']);
+  });
+
+  testWidgets('view item supplies multi source, page size, and selection', (
+    tester,
+  ) async {
+    SelectionSheetLoadRequest? receivedRequest;
+    List<String>? result;
+
+    await tester.pumpWidget(
+      _TestApp(
+        onPressed: (context) async {
+          result = await SelectionSheet.showMulti<String>(
+            context: context,
+            item: SelectionSheetViewItem(
+              loadItems: (request) async {
+                receivedRequest = request;
+                return const SelectionSheetPage(
+                  items: ['France', 'Germany'],
+                );
+              },
+              pageSize: 7,
+              initialSelection: const ['France'],
+              title: 'Configured countries',
+            ),
+            itemLabelBuilder: (item) => item,
+          );
+        },
+      ),
+    );
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+
+    expect(receivedRequest?.pageSize, 7);
+    expect(find.text('Configured countries'), findsOneWidget);
+
     await tester.tap(find.text('Germany'));
     await tester.pump();
     await tester.tap(find.text('Done'));
@@ -389,6 +514,43 @@ void main() {
     expect(find.text('Second page'), findsOneWidget);
   });
 
+  testWidgets('itemKeyBuilder deduplicates pages and matches initial values', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _TestApp(
+        onPressed: (context) {
+          SelectionSheet.showSingle<String>(
+            context: context,
+            initialValue: '1:Initial instance',
+            itemKeyBuilder: (item) => item.split(':').first,
+            itemLabelBuilder: (item) => item.split(':').last,
+            itemBuilder: (context, item, state) {
+              return Text('${item.split(':').first}:${state.isSelected}');
+            },
+            loadItems: (request) async {
+              if (request.page == 1) {
+                return const SelectionSheetPage(
+                  items: ['1:France'],
+                  hasMore: true,
+                );
+              }
+              return const SelectionSheetPage(
+                items: ['1:France duplicate', '2:Germany'],
+              );
+            },
+          );
+        },
+      ),
+    );
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1:true'), findsOneWidget);
+    expect(find.text('2:false'), findsOneWidget);
+  });
+
   testWidgets('sections use sticky custom headers', (tester) async {
     await tester.pumpWidget(
       _TestApp(
@@ -641,6 +803,43 @@ void main() {
     expect(changedValue, 'Germany');
     expect(find.text('Germany'), findsOneWidget);
     expect(formKey.currentState!.validate(), isTrue);
+  });
+
+  testWidgets('SelectionSheetView embeds a multi-selection workflow', (
+    tester,
+  ) async {
+    List<String>? changed;
+    List<String>? confirmed;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 500,
+            child: SelectionSheetView<String>.multi(
+              items: const ['France', 'Germany'],
+              initialSelection: const ['France'],
+              title: 'Countries',
+              itemLabelBuilder: (item) => item,
+              onSelectionChanged: (value) => changed = value,
+              onConfirmed: (value) => confirmed = value,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Countries'), findsOneWidget);
+    await tester.tap(find.text('Germany'));
+    await tester.pump();
+
+    expect(changed, ['France', 'Germany']);
+
+    await tester.tap(find.text('Done'));
+    await tester.pump();
+
+    expect(confirmed, ['France', 'Germany']);
+    expect(find.text('Countries'), findsOneWidget);
   });
 
   testWidgets('multi form field commits selected values', (tester) async {
