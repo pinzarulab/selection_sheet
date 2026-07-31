@@ -7,7 +7,7 @@ and remote search, pagination, grouped results, draggable heights, keyboard
 avoidance, Material/Cupertino adaptation, and a theming system that supports
 both global defaults and per-sheet overrides.
 
-The [example app](example/) is an interactive 0.5.0 showcase covering form,
+The [example app](example/) is an interactive 0.5.1 showcase covering form,
 modal, remote paginated, custom-search, and embedded selection workflows.
 
 ## Single selection
@@ -256,6 +256,42 @@ SelectionSheet.showSingle<User>(
 ```
 
 Section order follows the first occurrence of each key in the loaded items.
+Sticky headers are constrained to their own section, so previous headers do
+not accumulate while scrolling.
+
+## Drag handle
+
+Modal sheets display the drag handle from `SelectionSheetThemeData` by
+default. Override it for one workflow:
+
+```dart
+SelectionSheet.showSingle<Country>(
+  context: context,
+  items: countries,
+  itemLabelBuilder: (country) => country.name,
+  dragHandleBuilder: (context) {
+    return Center(
+      child: Container(
+        width: 56,
+        height: 6,
+        margin: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primary,
+          borderRadius: BorderRadius.circular(3),
+        ),
+      ),
+    );
+  },
+);
+```
+
+Use `showDragHandle: false` to remove it. A custom builder enables the handle
+automatically unless it is explicitly hidden. The builder can also be set
+globally in `SelectionSheetThemeData`; a per-workflow builder takes precedence.
+
+`SelectionSheetView<T>` hides the handle by default because an embedded view
+is not draggable. Pass `showDragHandle: true` when embedding it inside your own
+draggable container.
 
 ## Grid presentation
 

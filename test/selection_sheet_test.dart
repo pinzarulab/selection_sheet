@@ -578,6 +578,64 @@ void main() {
     );
     expect(headers, hasLength(2));
     expect(headers.every((header) => header.pinned), isTrue);
+    expect(find.byType(SliverMainAxisGroup), findsNWidgets(2));
+  });
+
+  testWidgets('drag handle can be hidden for an individual modal', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _TestApp(
+        onPressed: (context) {
+          SelectionSheet.showSingle<String>(
+            context: context,
+            items: const ['France'],
+            itemLabelBuilder: (item) => item,
+            showDragHandle: false,
+          );
+        },
+      ),
+    );
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+
+    final dragHandles = find.byWidgetPredicate((widget) {
+      return widget is Container &&
+          widget.constraints ==
+              const BoxConstraints.tightFor(width: 32, height: 4);
+    });
+    expect(dragHandles, findsNothing);
+  });
+
+  testWidgets('custom drag handle overrides the global builder', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _TestApp(
+        theme: SelectionSheetThemeData(
+          dragHandleBuilder: (context) {
+            return const SizedBox(key: Key('global-drag-handle'));
+          },
+        ),
+        onPressed: (context) {
+          SelectionSheet.showSingle<String>(
+            context: context,
+            items: const ['France'],
+            itemLabelBuilder: (item) => item,
+            dragHandleBuilder: (context) {
+              return const SizedBox(key: Key('custom-drag-handle'));
+            },
+          );
+        },
+      ),
+    );
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('custom-drag-handle')), findsOneWidget);
+    expect(find.byKey(const Key('global-drag-handle')), findsNothing);
   });
 
   testWidgets('grid presentation can be configured globally', (tester) async {

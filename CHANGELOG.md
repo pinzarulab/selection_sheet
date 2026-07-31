@@ -1,3 +1,12 @@
+## 0.5.1
+
+- Prevents sticky section headers from accumulating and obscuring the final
+  section while scrolling.
+- Adds per-workflow `showDragHandle` control and hides the handle by default
+  for non-draggable embedded views.
+- Adds global and per-workflow `dragHandleBuilder` customization.
+- Updates the example with a full-height embedded workflow and custom handle.
+
 ## 0.5.0
 
 - Adds stable item identity with `itemKeyBuilder` for selection matching and

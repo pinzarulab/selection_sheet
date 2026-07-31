@@ -1,6 +1,6 @@
 # selection_sheet example
 
-An interactive showcase for `selection_sheet` 0.5.0.
+An interactive showcase for `selection_sheet` 0.5.1.
 
 The example demonstrates:
 
@@ -9,6 +9,7 @@ The example demonstrates:
 - stable model identity with `itemKeyBuilder`;
 - optional modal configuration with `SelectionSheetViewItem<T>`;
 - a globally configured custom search input;
+- a custom modal drag handle;
 - sections, selected chips, and grid presentation;
 - the embeddable `SelectionSheetView<T>` workflow.
 

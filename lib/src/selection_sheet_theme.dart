@@ -50,6 +50,7 @@ class SelectionSheetThemeData {
     this.searchPadding = const EdgeInsets.fromLTRB(16, 8, 16, 8),
     this.searchDebounceDuration = const Duration(milliseconds: 300),
     this.searchFieldBuilder,
+    this.dragHandleBuilder,
     this.itemBuilder,
     this.sectionHeaderBuilder,
     this.loadingBuilder,
@@ -131,6 +132,9 @@ class SelectionSheetThemeData {
 
   /// Optional application-wide search input.
   final SelectionSheetSearchFieldBuilder? searchFieldBuilder;
+
+  /// Optional application-wide drag handle.
+  final SelectionSheetDragHandleBuilder? dragHandleBuilder;
 
   /// Optional application-wide item renderer.
   final SelectionSheetGlobalItemBuilder? itemBuilder;
@@ -214,6 +218,8 @@ class SelectionSheetThemeData {
     Duration? searchDebounceDuration,
     SelectionSheetSearchFieldBuilder? searchFieldBuilder,
     bool clearSearchFieldBuilder = false,
+    SelectionSheetDragHandleBuilder? dragHandleBuilder,
+    bool clearDragHandleBuilder = false,
     SelectionSheetGlobalItemBuilder? itemBuilder,
     bool clearItemBuilder = false,
     SelectionSheetSectionHeaderBuilder? sectionHeaderBuilder,
@@ -254,6 +260,9 @@ class SelectionSheetThemeData {
       searchFieldBuilder: clearSearchFieldBuilder
           ? null
           : searchFieldBuilder ?? this.searchFieldBuilder,
+      dragHandleBuilder: clearDragHandleBuilder
+          ? null
+          : dragHandleBuilder ?? this.dragHandleBuilder,
       itemBuilder: clearItemBuilder ? null : itemBuilder ?? this.itemBuilder,
       sectionHeaderBuilder: clearSectionHeaderBuilder
           ? null
@@ -296,6 +305,7 @@ class SelectionSheetThemeData {
             other.searchPadding == searchPadding &&
             other.searchDebounceDuration == searchDebounceDuration &&
             other.searchFieldBuilder == searchFieldBuilder &&
+            other.dragHandleBuilder == dragHandleBuilder &&
             other.itemBuilder == itemBuilder &&
             other.sectionHeaderBuilder == sectionHeaderBuilder &&
             other.loadingBuilder == loadingBuilder &&
@@ -333,6 +343,7 @@ class SelectionSheetThemeData {
         searchPadding,
         searchDebounceDuration,
         searchFieldBuilder,
+        dragHandleBuilder,
         itemBuilder,
         sectionHeaderBuilder,
         loadingBuilder,

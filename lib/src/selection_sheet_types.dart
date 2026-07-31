@@ -22,6 +22,11 @@ typedef SelectionSheetSearchFieldBuilder = Widget Function(
   SelectionSheetSearchFieldData search,
 );
 
+/// Builds a custom drag handle for a selection sheet.
+typedef SelectionSheetDragHandleBuilder = Widget Function(
+  BuildContext context,
+);
+
 /// Loads one page of remote items.
 typedef SelectionSheetPageLoader<T> = Future<SelectionSheetPage<T>> Function(
     SelectionSheetLoadRequest request);
@@ -94,6 +99,8 @@ class SelectionSheetViewItem<T> {
     this.initialSelection,
     this.hintText,
     this.title,
+    this.showDragHandle,
+    this.dragHandleBuilder,
   }) : assert(pageSize == null || pageSize > 0);
 
   /// Local items, mutually exclusive with [loadItems] after resolution.
@@ -116,6 +123,12 @@ class SelectionSheetViewItem<T> {
 
   /// Sheet title.
   final String? title;
+
+  /// Whether a modal sheet displays its drag handle.
+  final bool? showDragHandle;
+
+  /// Custom drag handle displayed by a modal sheet.
+  final SelectionSheetDragHandleBuilder? dragHandleBuilder;
 }
 
 /// A request passed to a remote [SelectionSheetPageLoader].

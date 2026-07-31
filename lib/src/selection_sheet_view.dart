@@ -59,6 +59,8 @@ class SelectionSheetView<T> extends StatefulWidget {
     this.sectionLabelBuilder,
     this.sectionHeaderBuilder,
     this.stickySectionHeaders = true,
+    this.showDragHandle,
+    this.dragHandleBuilder,
     this.layout,
     this.gridDelegate,
     this.enablePullToRefresh = true,
@@ -104,6 +106,8 @@ class SelectionSheetView<T> extends StatefulWidget {
     this.sectionLabelBuilder,
     this.sectionHeaderBuilder,
     this.stickySectionHeaders = true,
+    this.showDragHandle,
+    this.dragHandleBuilder,
     this.layout,
     this.gridDelegate,
     this.showSelectedChips,
@@ -147,6 +151,8 @@ class SelectionSheetView<T> extends StatefulWidget {
   final SelectionSheetSectionLabelBuilder? sectionLabelBuilder;
   final SelectionSheetSectionHeaderBuilder? sectionHeaderBuilder;
   final bool stickySectionHeaders;
+  final bool? showDragHandle;
+  final SelectionSheetDragHandleBuilder? dragHandleBuilder;
   final SelectionSheetLayout? layout;
   final SliverGridDelegate? gridDelegate;
   final bool? showSelectedChips;
@@ -211,6 +217,11 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
 
   bool get _showSelectedChips =>
       widget.showSelectedChips ?? _theme.showSelectedChips;
+
+  bool get _showDragHandle =>
+      widget.showDragHandle ??
+      widget.dragHandleBuilder != null ||
+          (widget.popOnComplete ? _theme.showDragHandle : false);
 
   @override
   void initState() {
@@ -529,8 +540,10 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
           top: false,
           child: Column(
             children: [
-              if (theme.showDragHandle)
-                _DragHandle(color: theme.dragHandleColor),
+              if (_showDragHandle)
+                (widget.dragHandleBuilder ?? theme.dragHandleBuilder)
+                        ?.call(context) ??
+                    _DragHandle(color: theme.dragHandleColor),
               _buildHeader(context),
               if (widget.searchable || widget.searchFieldBuilder != null)
                 _buildSearch(context),
@@ -738,18 +751,23 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
     } else {
       for (final section in _groupItems(items)) {
         slivers.add(
-          SliverPersistentHeader(
-            pinned: widget.stickySectionHeaders,
-            delegate: _SectionHeaderDelegate(
-              height: _theme.sectionHeaderHeight,
-              child: _buildSectionHeader(context, section),
-            ),
-          ),
-        );
-        slivers.add(
-          SliverPadding(
-            padding: _theme.itemPadding,
-            sliver: _buildItemSliver(section.items, applyItemPadding: false),
+          SliverMainAxisGroup(
+            slivers: [
+              SliverPersistentHeader(
+                pinned: widget.stickySectionHeaders,
+                delegate: _SectionHeaderDelegate(
+                  height: _theme.sectionHeaderHeight,
+                  child: _buildSectionHeader(context, section),
+                ),
+              ),
+              SliverPadding(
+                padding: _theme.itemPadding,
+                sliver: _buildItemSliver(
+                  section.items,
+                  applyItemPadding: false,
+                ),
+              ),
+            ],
           ),
         );
       }

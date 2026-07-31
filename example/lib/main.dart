@@ -64,6 +64,20 @@ Widget _buildSearchField(
   );
 }
 
+Widget _buildDragHandle(BuildContext context) {
+  return Center(
+    child: Container(
+      width: 56,
+      height: 6,
+      margin: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primary,
+        borderRadius: BorderRadius.circular(3),
+      ),
+    ),
+  );
+}
+
 class CountryShowcasePage extends StatefulWidget {
   const CountryShowcasePage({super.key});
 
@@ -167,6 +181,7 @@ class _CountryShowcasePageState extends State<CountryShowcasePage> {
   List<Country> embeddedCountries = const [
     Country('UA', 'Ukraine', 'Europe'),
   ];
+  int selectedPage = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -176,74 +191,124 @@ class _CountryShowcasePageState extends State<CountryShowcasePage> {
         actions: const [
           Padding(
             padding: EdgeInsets.only(right: 16),
-            child: Center(child: Chip(label: Text('v0.5.0'))),
+            child: Center(child: Chip(label: Text('v0.5.1'))),
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-        children: [
-          const _IntroCard(),
-          const SizedBox(height: 16),
-          _ShowcaseCard(
-            icon: Icons.fact_check_outlined,
-            title: 'Native form field',
-            description:
-                'Validation, stable identity, and the globally customized '
-                'search input.',
-            child: SelectionSheetFormField<Country>(
-              items: countries,
-              initialValue: formCountry,
-              searchable: true,
-              title: 'Choose a country',
-              decoration: const InputDecoration(
-                labelText: 'Country',
-                hintText: 'Required',
+      body: selectedPage == 0 ? _buildOverview() : _buildEmbeddedView(),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: selectedPage,
+        onDestinationSelected: (index) {
+          setState(() => selectedPage = index);
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.widgets_outlined),
+            selectedIcon: Icon(Icons.widgets),
+            label: 'Examples',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.dashboard_customize_outlined),
+            selectedIcon: Icon(Icons.dashboard_customize),
+            label: 'Embedded',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverview() {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+      children: [
+        const _IntroCard(),
+        const SizedBox(height: 16),
+        _ShowcaseCard(
+          icon: Icons.fact_check_outlined,
+          title: 'Native form field',
+          description:
+              'Validation, stable identity, and the globally customized '
+              'search input.',
+          child: SelectionSheetFormField<Country>(
+            items: countries,
+            initialValue: formCountry,
+            searchable: true,
+            title: 'Choose a country',
+            decoration: const InputDecoration(
+              labelText: 'Country',
+              hintText: 'Required',
+            ),
+            itemLabelBuilder: (country) => country.name,
+            itemKeyBuilder: (country) => country.code,
+            validator: (country) => country == null ? 'Choose a country' : null,
+            onChanged: (country) => setState(() => formCountry = country),
+          ),
+        ),
+        const SizedBox(height: 16),
+        _ShowcaseCard(
+          icon: Icons.vertical_align_top_outlined,
+          title: 'Modal workflows',
+          description:
+              'Open a local single selector or a paginated remote grid.',
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              FilledButton.icon(
+                onPressed: _selectOne,
+                icon: const Icon(Icons.public),
+                label: Text(modalCountry?.name ?? 'Select one'),
               ),
-              itemLabelBuilder: (country) => country.name,
-              itemKeyBuilder: (country) => country.code,
-              validator: (country) =>
-                  country == null ? 'Choose a country' : null,
-              onChanged: (country) => setState(() => formCountry = country),
-            ),
-          ),
-          const SizedBox(height: 16),
-          _ShowcaseCard(
-            icon: Icons.vertical_align_top_outlined,
-            title: 'Modal workflows',
-            description:
-                'Open a local single selector or a paginated remote grid.',
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                FilledButton.icon(
-                  onPressed: _selectOne,
-                  icon: const Icon(Icons.public),
-                  label: Text(modalCountry?.name ?? 'Select one'),
+              OutlinedButton.icon(
+                onPressed: _selectRemotely,
+                icon: const Icon(Icons.cloud_outlined),
+                label: Text(
+                  remoteCountries.isEmpty
+                      ? 'Remote multi-select'
+                      : '${remoteCountries.length} selected',
                 ),
-                OutlinedButton.icon(
-                  onPressed: _selectRemotely,
-                  icon: const Icon(Icons.cloud_outlined),
-                  label: Text(
-                    remoteCountries.isEmpty
-                        ? 'Remote multi-select'
-                        : '${remoteCountries.length} selected',
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
-          _ShowcaseCard(
-            icon: Icons.dashboard_customize_outlined,
-            title: 'Embedded SelectionSheetView',
-            badge: 'New in 0.5.0',
-            description:
-                'The complete selection workflow can now live inside any '
-                'page, panel, or dialog.',
-            child: SizedBox(
-              height: 460,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmbeddedView() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.dashboard_customize_outlined),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Embedded SelectionSheetView',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+              const Chip(
+                visualDensity: VisualDensity.compact,
+                label: Text('New in 0.5.0'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'A full-height embedded workflow avoids competing with a parent '
+            'vertical scroll view.',
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: ScrollConfiguration(
+              behavior: ScrollConfiguration.of(context).copyWith(
+                physics: const ClampingScrollPhysics(),
+                overscroll: false,
+              ),
               child: SelectionSheetView<Country>.multi(
                 items: countries,
                 initialSelection: embeddedCountries,
@@ -253,15 +318,16 @@ class _CountryShowcasePageState extends State<CountryShowcasePage> {
                 itemLabelBuilder: (country) => country.name,
                 itemKeyBuilder: (country) => country.code,
                 sectionBuilder: (country) => country.region,
+                theme: SelectionSheetTheme.of(
+                  context,
+                ).copyWith(contentPadding: EdgeInsets.zero),
                 onSelectionChanged: (selection) {
                   setState(() => embeddedCountries = selection);
                 },
                 onConfirmed: (selection) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text(
-                        '${selection.length} countries confirmed',
-                      ),
+                      content: Text('${selection.length} countries confirmed'),
                     ),
                   );
                 },
@@ -308,6 +374,7 @@ class _CountryShowcasePageState extends State<CountryShowcasePage> {
         initialSelection: remoteCountries,
         hintText: 'Search the remote source',
         title: 'Remote countries',
+        dragHandleBuilder: _buildDragHandle,
       ),
       searchable: true,
       itemLabelBuilder: (country) => country.name,
@@ -404,14 +471,12 @@ class _ShowcaseCard extends StatelessWidget {
     required this.title,
     required this.description,
     required this.child,
-    this.badge,
   });
 
   final IconData icon;
   final String title;
   final String description;
   final Widget child;
-  final String? badge;
 
   @override
   Widget build(BuildContext context) {
@@ -432,11 +497,6 @@ class _ShowcaseCard extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
-                if (badge case final label?)
-                  Chip(
-                    visualDensity: VisualDensity.compact,
-                    label: Text(label),
-                  ),
               ],
             ),
             const SizedBox(height: 8),
