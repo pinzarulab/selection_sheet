@@ -249,7 +249,8 @@ class _CountryShowcasePageState extends State<CountryShowcasePage> {
           icon: Icons.vertical_align_top_outlined,
           title: 'Modal workflows',
           description:
-              'Open a local single selector or a paginated remote grid.',
+              'Open a fixed-height local selector or a paginated remote '
+              'grid.',
           child: Wrap(
             spacing: 12,
             runSpacing: 12,
@@ -347,8 +348,10 @@ class _CountryShowcasePageState extends State<CountryShowcasePage> {
         initialValue: modalCountry,
         title: 'Country',
         hintText: 'Search countries',
+        enableDrag: false,
       ),
       searchable: true,
+      showDragHandle: true,
       itemLabelBuilder: (country) => country.name,
       itemKeyBuilder: (country) => country.code,
       itemBuilder: (context, country, state) {

@@ -638,6 +638,138 @@ void main() {
     expect(find.byKey(const Key('global-drag-handle')), findsNothing);
   });
 
+  testWidgets('drag handle resizes a Cupertino sheet up and down', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _TestApp(
+        theme: const SelectionSheetThemeData(
+          initialHeight: 0.5,
+          minHeight: 0.3,
+          maxHeight: 0.9,
+        ),
+        onPressed: (context) {
+          SelectionSheet.showSingle<String>(
+            context: context,
+            items: const ['France'],
+            itemLabelBuilder: (item) => item,
+            presentation: SelectionSheetPresentation.cupertino,
+            dragHandleBuilder: (context) {
+              return const SizedBox(
+                key: Key('cupertino-drag-handle'),
+                height: 32,
+              );
+            },
+          );
+        },
+      ),
+    );
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+
+    final view = find.byType(SelectionSheetView<String>);
+    final dragTarget = find.ancestor(
+      of: find.byKey(const Key('cupertino-drag-handle')),
+      matching: find.byType(GestureDetector),
+    );
+    final initialHeight = tester.getSize(view).height;
+
+    await tester.drag(
+      dragTarget,
+      const Offset(0, -120),
+    );
+    await tester.pump();
+    final expandedHeight = tester.getSize(view).height;
+    expect(expandedHeight, greaterThan(initialHeight));
+
+    await tester.drag(
+      dragTarget,
+      const Offset(0, 160),
+    );
+    await tester.pump();
+    expect(tester.getSize(view).height, lessThan(expandedHeight));
+  });
+
+  testWidgets('dragging a Cupertino handle to minimum dismisses the sheet', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _TestApp(
+        theme: const SelectionSheetThemeData(
+          initialHeight: 0.5,
+          minHeight: 0.3,
+          maxHeight: 0.9,
+        ),
+        onPressed: (context) {
+          SelectionSheet.showSingle<String>(
+            context: context,
+            items: const ['France'],
+            itemLabelBuilder: (item) => item,
+            presentation: SelectionSheetPresentation.cupertino,
+            dragHandleBuilder: (context) {
+              return const SizedBox(
+                key: Key('dismiss-cupertino-handle'),
+                height: 32,
+              );
+            },
+          );
+        },
+      ),
+    );
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SelectionSheetView<String>), findsOneWidget);
+
+    final dragTarget = find.ancestor(
+      of: find.byKey(const Key('dismiss-cupertino-handle')),
+      matching: find.byType(GestureDetector),
+    );
+    await tester.drag(dragTarget, const Offset(0, 240));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SelectionSheetView<String>), findsNothing);
+    expect(find.text('Open'), findsOneWidget);
+  });
+
+  testWidgets('fixed-height sheet scrolls items without resizing', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _TestApp(
+        theme: const SelectionSheetThemeData(
+          initialHeight: 0.5,
+          minHeight: 0.3,
+          maxHeight: 0.9,
+        ),
+        onPressed: (context) {
+          SelectionSheet.showSingle<String>(
+            context: context,
+            items: List.generate(30, (index) => 'Item $index'),
+            itemLabelBuilder: (item) => item,
+            enableDrag: false,
+          );
+        },
+      ),
+    );
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+
+    final view = find.byType(SelectionSheetView<String>);
+    final initialHeight = tester.getSize(view).height;
+    final scrollView = tester.widget<CustomScrollView>(
+      find.byType(CustomScrollView),
+    );
+
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -200));
+    await tester.pump();
+
+    expect(scrollView.controller!.offset, greaterThan(0));
+    expect(tester.getSize(view).height, initialHeight);
+  });
+
   testWidgets('grid presentation can be configured globally', (tester) async {
     await tester.pumpWidget(
       _TestApp(

@@ -6,6 +6,7 @@ The example demonstrates:
 
 - native Flutter form integration;
 - local single-selection and remote paginated multi-selection;
+- a fixed-height sheet with independently scrolling results;
 - stable model identity with `itemKeyBuilder`;
 - optional modal configuration with `SelectionSheetViewItem<T>`;
 - a globally configured custom search input;

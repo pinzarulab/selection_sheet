@@ -101,6 +101,7 @@ class SelectionSheetViewItem<T> {
     this.title,
     this.showDragHandle,
     this.dragHandleBuilder,
+    this.enableDrag,
   }) : assert(pageSize == null || pageSize > 0);
 
   /// Local items, mutually exclusive with [loadItems] after resolution.
@@ -129,6 +130,9 @@ class SelectionSheetViewItem<T> {
 
   /// Custom drag handle displayed by a modal sheet.
   final SelectionSheetDragHandleBuilder? dragHandleBuilder;
+
+  /// Whether the modal can be resized by dragging.
+  final bool? enableDrag;
 }
 
 /// A request passed to a remote [SelectionSheetPageLoader].

@@ -1,3 +1,10 @@
+## 0.6.0
+
+- Makes default and custom drag handles resize Material and Cupertino sheets.
+- Adds drag-to-dismiss behavior for Cupertino sheet handles.
+- Adds `enableDrag: false` for a strict initial sheet height with independently
+  scrolling content.
+
 ## 0.5.1
 
 - Prevents sticky section headers from accumulating and obscuring the final

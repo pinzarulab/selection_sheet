@@ -34,6 +34,7 @@ abstract final class SelectionSheet {
     bool stickySectionHeaders = true,
     bool? showDragHandle,
     SelectionSheetDragHandleBuilder? dragHandleBuilder,
+    bool? enableDrag,
     SelectionSheetLayout? layout,
     SliverGridDelegate? gridDelegate,
     SelectionSheetLoadingBuilder? loadingBuilder,
@@ -56,6 +57,7 @@ abstract final class SelectionSheet {
     final resolvedTitle = title ?? item?.title;
     final resolvedInitialValue = initialValue ?? item?.initialValue;
     final resolvedSearchHintText = searchHintText ?? item?.hintText;
+    final resolvedEnableDrag = enableDrag ?? item?.enableDrag ?? true;
     _validateSource(resolvedItems, resolvedLoadItems, resolvedPageSize);
     final resolvedTheme = theme ?? SelectionSheetTheme.of(context);
     return _show<T>(
@@ -63,8 +65,14 @@ abstract final class SelectionSheet {
       presentation: presentation,
       useRootNavigator: useRootNavigator,
       isDismissible: isDismissible,
+      enableDrag: resolvedEnableDrag,
       theme: resolvedTheme,
-      builder: (sheetContext, scrollController) {
+      builder: (
+        sheetContext,
+        scrollController,
+        onDragHandleUpdate,
+        onDragHandleEnd,
+      ) {
         return SelectionSheetView<T>.single(
           items: resolvedItems,
           loadItems: resolvedLoadItems,
@@ -87,7 +95,9 @@ abstract final class SelectionSheet {
           sectionLabelBuilder: sectionLabelBuilder,
           sectionHeaderBuilder: sectionHeaderBuilder,
           stickySectionHeaders: stickySectionHeaders,
-          showDragHandle: showDragHandle ?? item?.showDragHandle,
+          showDragHandle: showDragHandle ??
+              item?.showDragHandle ??
+              (resolvedEnableDrag ? null : false),
           dragHandleBuilder: dragHandleBuilder ?? item?.dragHandleBuilder,
           layout: layout ?? resolvedTheme.layout,
           gridDelegate: gridDelegate ?? resolvedTheme.gridDelegate,
@@ -100,6 +110,8 @@ abstract final class SelectionSheet {
           enablePullToRefresh: enablePullToRefresh,
           theme: resolvedTheme,
           scrollController: scrollController,
+          onDragHandleUpdate: onDragHandleUpdate,
+          onDragHandleEnd: onDragHandleEnd,
           popOnComplete: true,
         );
       },
@@ -135,6 +147,7 @@ abstract final class SelectionSheet {
     bool stickySectionHeaders = true,
     bool? showDragHandle,
     SelectionSheetDragHandleBuilder? dragHandleBuilder,
+    bool? enableDrag,
     SelectionSheetLayout? layout,
     SliverGridDelegate? gridDelegate,
     bool? showSelectedChips,
@@ -160,6 +173,7 @@ abstract final class SelectionSheet {
     final resolvedInitialSelection =
         initialSelection ?? item?.initialSelection ?? const [];
     final resolvedSearchHintText = searchHintText ?? item?.hintText;
+    final resolvedEnableDrag = enableDrag ?? item?.enableDrag ?? true;
     _validateSource(resolvedItems, resolvedLoadItems, resolvedPageSize);
     final resolvedTheme = theme ?? SelectionSheetTheme.of(context);
     return _show<List<T>>(
@@ -167,8 +181,14 @@ abstract final class SelectionSheet {
       presentation: presentation,
       useRootNavigator: useRootNavigator,
       isDismissible: isDismissible,
+      enableDrag: resolvedEnableDrag,
       theme: resolvedTheme,
-      builder: (sheetContext, scrollController) {
+      builder: (
+        sheetContext,
+        scrollController,
+        onDragHandleUpdate,
+        onDragHandleEnd,
+      ) {
         return SelectionSheetView<T>.multi(
           items: resolvedItems,
           loadItems: resolvedLoadItems,
@@ -192,7 +212,9 @@ abstract final class SelectionSheet {
           sectionLabelBuilder: sectionLabelBuilder,
           sectionHeaderBuilder: sectionHeaderBuilder,
           stickySectionHeaders: stickySectionHeaders,
-          showDragHandle: showDragHandle ?? item?.showDragHandle,
+          showDragHandle: showDragHandle ??
+              item?.showDragHandle ??
+              (resolvedEnableDrag ? null : false),
           dragHandleBuilder: dragHandleBuilder ?? item?.dragHandleBuilder,
           layout: layout ?? resolvedTheme.layout,
           gridDelegate: gridDelegate ?? resolvedTheme.gridDelegate,
@@ -208,6 +230,8 @@ abstract final class SelectionSheet {
           enablePullToRefresh: enablePullToRefresh,
           theme: resolvedTheme,
           scrollController: scrollController,
+          onDragHandleUpdate: onDragHandleUpdate,
+          onDragHandleEnd: onDragHandleEnd,
           popOnComplete: true,
         );
       },
@@ -234,12 +258,17 @@ abstract final class SelectionSheet {
     required SelectionSheetPresentation presentation,
     required bool useRootNavigator,
     required bool isDismissible,
+    required bool enableDrag,
     required SelectionSheetThemeData theme,
     required Widget Function(
       BuildContext context,
       ScrollController scrollController,
+      GestureDragUpdateCallback? onDragHandleUpdate,
+      GestureDragEndCallback? onDragHandleEnd,
     ) builder,
   }) {
+    final draggableController = DraggableScrollableController();
+    final fixedScrollController = ScrollController();
     final platform = Theme.of(context).platform;
     final useCupertino = presentation == SelectionSheetPresentation.cupertino ||
         presentation == SelectionSheetPresentation.adaptive &&
@@ -247,17 +276,55 @@ abstract final class SelectionSheet {
                 platform == TargetPlatform.macOS);
 
     Widget sheetBuilder(BuildContext routeContext) {
+      if (!enableDrag) {
+        return FractionallySizedBox(
+          alignment: Alignment.bottomCenter,
+          widthFactor: 1,
+          heightFactor: theme.initialHeight,
+          child: builder(routeContext, fixedScrollController, null, null),
+        );
+      }
+
+      void handleDragUpdate(DragUpdateDetails details) {
+        if (!draggableController.isAttached) return;
+        final availableHeight = MediaQuery.sizeOf(routeContext).height;
+        final nextSize =
+            draggableController.size - details.delta.dy / availableHeight;
+        draggableController.jumpTo(
+          nextSize.clamp(theme.minHeight, theme.maxHeight),
+        );
+      }
+
+      void handleDragEnd(DragEndDetails details) {
+        if (!draggableController.isAttached) return;
+        final downwardVelocity = details.primaryVelocity ?? 0;
+        final reachedMinimum =
+            draggableController.size <= theme.minHeight + 0.001;
+        if (reachedMinimum || downwardVelocity > 900) {
+          Navigator.of(routeContext).pop();
+        }
+      }
+
       return DraggableScrollableSheet(
+        controller: draggableController,
         initialChildSize: theme.initialHeight,
         minChildSize: theme.minHeight,
         maxChildSize: theme.maxHeight,
         expand: false,
-        builder: builder,
+        builder: (context, scrollController) {
+          return builder(
+            context,
+            scrollController,
+            handleDragUpdate,
+            handleDragEnd,
+          );
+        },
       );
     }
 
+    late final Future<R?> route;
     if (useCupertino) {
-      return showCupertinoModalPopup<R>(
+      route = showCupertinoModalPopup<R>(
         context: context,
         useRootNavigator: useRootNavigator,
         barrierDismissible: isDismissible,
@@ -266,18 +333,24 @@ abstract final class SelectionSheet {
           child: sheetBuilder(routeContext),
         ),
       );
+    } else {
+      route = showModalBottomSheet<R>(
+        context: context,
+        useRootNavigator: useRootNavigator,
+        isDismissible: isDismissible,
+        enableDrag: enableDrag,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: Colors.transparent,
+        barrierColor: Colors.black54,
+        builder: sheetBuilder,
+      );
     }
 
-    return showModalBottomSheet<R>(
-      context: context,
-      useRootNavigator: useRootNavigator,
-      isDismissible: isDismissible,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black54,
-      builder: sheetBuilder,
-    );
+    return route.whenComplete(() {
+      draggableController.dispose();
+      fixedScrollController.dispose();
+    });
   }
 
   static Duration _resolveSearchDebounceDuration(

@@ -288,10 +288,34 @@ SelectionSheet.showSingle<Country>(
 Use `showDragHandle: false` to remove it. A custom builder enables the handle
 automatically unless it is explicitly hidden. The builder can also be set
 globally in `SelectionSheetThemeData`; a per-workflow builder takes precedence.
+In modal presentation, dragging either the default or a custom handle resizes
+the sheet between its configured `minHeight` and `maxHeight` on Material and
+Cupertino platforms. Dragging down to `minHeight`, or performing a fast
+downward swipe, dismisses the modal.
 
 `SelectionSheetView<T>` hides the handle by default because an embedded view
 is not draggable. Pass `showDragHandle: true` when embedding it inside your own
 draggable container.
+
+### Fixed sheet height
+
+Disable resizing when the sheet must remain at its configured
+`initialHeight`. The results continue scrolling inside that fixed area:
+
+```dart
+SelectionSheet.showSingle<Country>(
+  context: context,
+  items: countries,
+  itemLabelBuilder: (country) => country.name,
+  enableDrag: false,
+  theme: SelectionSheetTheme.of(context).copyWith(
+    initialHeight: 0.65,
+  ),
+);
+```
+
+The drag handle is hidden automatically in fixed-height mode unless
+`showDragHandle: true` is explicitly supplied.
 
 ## Grid presentation
 

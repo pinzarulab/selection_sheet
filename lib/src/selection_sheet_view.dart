@@ -73,6 +73,8 @@ class SelectionSheetView<T> extends StatefulWidget {
     this.theme,
     this.scrollController,
     this.onSelected,
+    this.onDragHandleUpdate,
+    this.onDragHandleEnd,
     this.popOnComplete = false,
     super.key,
   })  : assert((items == null) != (loadItems == null)),
@@ -123,6 +125,8 @@ class SelectionSheetView<T> extends StatefulWidget {
     this.scrollController,
     this.onSelectionChanged,
     this.onConfirmed,
+    this.onDragHandleUpdate,
+    this.onDragHandleEnd,
     this.popOnComplete = false,
     super.key,
   })  : assert((items == null) != (loadItems == null)),
@@ -170,6 +174,8 @@ class SelectionSheetView<T> extends StatefulWidget {
   final ValueChanged<T>? onSelected;
   final ValueChanged<List<T>>? onSelectionChanged;
   final ValueChanged<List<T>>? onConfirmed;
+  final GestureDragUpdateCallback? onDragHandleUpdate;
+  final GestureDragEndCallback? onDragHandleEnd;
   final bool popOnComplete;
 
   bool get isRemote => loadItems != null;
@@ -540,10 +546,7 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
           top: false,
           child: Column(
             children: [
-              if (_showDragHandle)
-                (widget.dragHandleBuilder ?? theme.dragHandleBuilder)
-                        ?.call(context) ??
-                    _DragHandle(color: theme.dragHandleColor),
+              if (_showDragHandle) _buildDragHandle(context),
               _buildHeader(context),
               if (widget.searchable || widget.searchFieldBuilder != null)
                 _buildSearch(context),
@@ -553,6 +556,22 @@ class _SelectionSheetViewState<T> extends State<SelectionSheetView<T>> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildDragHandle(BuildContext context) {
+    final handle =
+        (widget.dragHandleBuilder ?? _theme.dragHandleBuilder)?.call(context) ??
+            _DragHandle(color: _theme.dragHandleColor);
+    if (widget.onDragHandleUpdate == null) return handle;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragUpdate: widget.onDragHandleUpdate,
+      onVerticalDragEnd: widget.onDragHandleEnd,
+      child: SizedBox(
+        width: double.infinity,
+        child: Center(child: handle),
       ),
     );
   }
