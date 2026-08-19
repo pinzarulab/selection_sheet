@@ -1,3 +1,10 @@
+## 0.6.1
+
+- Prevents Android handle gestures from being processed by two drag owners,
+  which could pop two routes and leave a black screen.
+- Makes a downward list drag at scroll offset zero dismiss the sheet
+  consistently on Android and iOS.
+
 ## 0.6.0
 
 - Makes default and custom drag handles resize Material and Cupertino sheets.

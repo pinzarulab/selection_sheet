@@ -733,6 +733,108 @@ void main() {
     expect(find.text('Open'), findsOneWidget);
   });
 
+  testWidgets('repeated Material handle drags dismiss only the sheet', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _TestApp(
+        theme: const SelectionSheetThemeData(
+          initialHeight: 0.5,
+          minHeight: 0.3,
+          maxHeight: 0.9,
+        ),
+        onPressed: (context) {
+          SelectionSheet.showSingle<String>(
+            context: context,
+            items: const ['France'],
+            itemLabelBuilder: (item) => item,
+            presentation: SelectionSheetPresentation.material,
+            dragHandleBuilder: (context) {
+              return const SizedBox(
+                key: Key('material-drag-handle'),
+                height: 32,
+              );
+            },
+          );
+        },
+      ),
+    );
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+
+    final dragTarget = find.ancestor(
+      of: find.byKey(const Key('material-drag-handle')),
+      matching: find.byType(GestureDetector),
+    );
+    for (var index = 0; index < 3; index++) {
+      await tester.drag(dragTarget, const Offset(0, -80));
+      await tester.pump();
+      await tester.drag(dragTarget, const Offset(0, 80));
+      await tester.pump();
+    }
+
+    expect(find.byType(SelectionSheetView<String>), findsOneWidget);
+
+    await tester.drag(dragTarget, const Offset(0, 300));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SelectionSheetView<String>), findsNothing);
+    expect(find.text('Open'), findsOneWidget);
+  });
+
+  testWidgets('list-at-top downward drag dismisses on Android and iOS', (
+    tester,
+  ) async {
+    Future<void> verify(TargetPlatform platform) async {
+      await tester.pumpWidget(
+        _TestApp(
+          platform: platform,
+          theme: const SelectionSheetThemeData(
+            initialHeight: 0.5,
+            minHeight: 0.3,
+            maxHeight: 0.9,
+          ),
+          onPressed: (context) {
+            SelectionSheet.showSingle<String>(
+              context: context,
+              items: List.generate(40, (index) => 'Item $index'),
+              itemLabelBuilder: (item) => item,
+            );
+          },
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      final list = find.byType(CustomScrollView);
+      final scrollable = find.descendant(
+        of: list,
+        matching: find.byType(Scrollable),
+      );
+      await tester.scrollUntilVisible(
+        find.text('Item 25'),
+        300,
+        scrollable: scrollable,
+      );
+      final scrollController =
+          tester.widget<CustomScrollView>(list).controller!;
+      expect(scrollController.offset, greaterThan(0));
+      scrollController.jumpTo(0);
+      await tester.pump();
+
+      await tester.drag(list, const Offset(0, 500));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SelectionSheetView<String>), findsNothing);
+      expect(find.text('Open'), findsOneWidget);
+    }
+
+    await verify(TargetPlatform.android);
+    await verify(TargetPlatform.iOS);
+  });
+
   testWidgets('fixed-height sheet scrolls items without resizing', (
     tester,
   ) async {
@@ -1061,15 +1163,20 @@ void main() {
 }
 
 class _TestApp extends StatelessWidget {
-  const _TestApp({required this.onPressed, this.theme});
+  const _TestApp({
+    required this.onPressed,
+    this.theme,
+    this.platform = TargetPlatform.android,
+  });
 
   final void Function(BuildContext context) onPressed;
   final SelectionSheetThemeData? theme;
+  final TargetPlatform platform;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      theme: ThemeData(platform: TargetPlatform.android),
+      theme: ThemeData(platform: platform),
       builder: (context, child) {
         return SelectionSheetTheme(
           data: theme ?? SelectionSheetThemeData.fallback(context),

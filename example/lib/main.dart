@@ -191,7 +191,7 @@ class _CountryShowcasePageState extends State<CountryShowcasePage> {
         actions: const [
           Padding(
             padding: EdgeInsets.only(right: 16),
-            child: Center(child: Chip(label: Text('v0.5.1'))),
+            child: Center(child: Chip(label: Text('v0.6.1'))),
           ),
         ],
       ),

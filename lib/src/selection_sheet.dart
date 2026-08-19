@@ -269,6 +269,7 @@ abstract final class SelectionSheet {
   }) {
     final draggableController = DraggableScrollableController();
     final fixedScrollController = ScrollController();
+    var dismissalRequested = false;
     final platform = Theme.of(context).platform;
     final useCupertino = presentation == SelectionSheetPresentation.cupertino ||
         presentation == SelectionSheetPresentation.adaptive &&
@@ -276,6 +277,14 @@ abstract final class SelectionSheet {
                 platform == TargetPlatform.macOS);
 
     Widget sheetBuilder(BuildContext routeContext) {
+      void dismissOnce() {
+        if (dismissalRequested) return;
+        final modalRoute = ModalRoute.of(routeContext);
+        if (modalRoute?.isCurrent != true) return;
+        dismissalRequested = true;
+        Navigator.of(routeContext).pop();
+      }
+
       if (!enableDrag) {
         return FractionallySizedBox(
           alignment: Alignment.bottomCenter,
@@ -301,24 +310,38 @@ abstract final class SelectionSheet {
         final reachedMinimum =
             draggableController.size <= theme.minHeight + 0.001;
         if (reachedMinimum || downwardVelocity > 900) {
-          Navigator.of(routeContext).pop();
+          dismissOnce();
         }
       }
 
-      return DraggableScrollableSheet(
-        controller: draggableController,
-        initialChildSize: theme.initialHeight,
-        minChildSize: theme.minHeight,
-        maxChildSize: theme.maxHeight,
-        expand: false,
-        builder: (context, scrollController) {
-          return builder(
-            context,
-            scrollController,
-            handleDragUpdate,
-            handleDragEnd,
-          );
+      var previousExtent = theme.initialHeight;
+      return NotificationListener<DraggableScrollableNotification>(
+        onNotification: (notification) {
+          final wasAboveMinimum =
+              previousExtent > notification.minExtent + 0.001;
+          previousExtent = notification.extent;
+          if (wasAboveMinimum &&
+              notification.extent <= notification.minExtent + 0.001) {
+            dismissOnce();
+          }
+          return false;
         },
+        child: DraggableScrollableSheet(
+          controller: draggableController,
+          initialChildSize: theme.initialHeight,
+          minChildSize: theme.minHeight,
+          maxChildSize: theme.maxHeight,
+          expand: false,
+          shouldCloseOnMinExtent: false,
+          builder: (context, scrollController) {
+            return builder(
+              context,
+              scrollController,
+              handleDragUpdate,
+              handleDragEnd,
+            );
+          },
+        ),
       );
     }
 
@@ -338,7 +361,9 @@ abstract final class SelectionSheet {
         context: context,
         useRootNavigator: useRootNavigator,
         isDismissible: isDismissible,
-        enableDrag: enableDrag,
+        // DraggableScrollableSheet owns resizing and dismissal. Enabling
+        // route dragging too can process one gesture twice and pop two routes.
+        enableDrag: false,
         isScrollControlled: true,
         useSafeArea: true,
         backgroundColor: Colors.transparent,
